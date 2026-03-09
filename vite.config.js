@@ -10,7 +10,7 @@ export default defineConfig({
     tailwindcss(),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'maskable-icon.png'],
+      includeAssets: ['vite.svg'],
       manifest: {
         name: 'Kanal Doluluk Analizi',
         short_name: 'Doluluk',
