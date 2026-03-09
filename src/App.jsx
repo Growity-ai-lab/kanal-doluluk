@@ -28,6 +28,7 @@ export default function App() {
     setRatingData(rData || []);
     setOccupancyData(oData || []);
     calculateStats(oData || []);
+    setSmartInsights(InsightService.getInsights(oData || []));
 
     if (oData && oData.length > 0) {
       const dates = [...new Set(oData.map(d => d.tarih))].sort().reverse();
@@ -55,6 +56,7 @@ export default function App() {
       setRatingData(newR);
       setOccupancyData(newO);
       calculateStats(newO);
+      setSmartInsights(InsightService.getInsights(newO));
 
       const dates = [...new Set(newO.map(d => d.tarih))].sort().reverse();
       setFilters(prev => ({ ...prev, date: dates[0] }));
@@ -267,6 +269,33 @@ export default function App() {
                     exit={{ opacity: 0, scale: 0.95 }}
                     className="space-y-10"
                   >
+                    {/* Insights Slider */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {smartInsights.slice(0, 4).map((insight, idx) => (
+                        <motion.div
+                          key={idx}
+                          initial={{ opacity: 0, x: 10 }}
+                          animate={{ opacity: 1, x: 0 }}
+                          transition={{ delay: idx * 0.1 }}
+                          className={`p-5 rounded-3xl border backdrop-blur-md flex gap-4 items-start ${insight.impact === 'critical' ? 'bg-rose-500/5 border-rose-500/20' :
+                              insight.impact === 'high' ? 'bg-amber-500/5 border-amber-500/20' :
+                                'bg-premium-500/5 border-premium-500/20'
+                            }`}
+                        >
+                          <div className={`mt-1 p-2 rounded-xl ${insight.impact === 'critical' ? 'bg-rose-500 text-white' :
+                              insight.impact === 'high' ? 'bg-amber-500 text-white' :
+                                'bg-premium-500 text-white'
+                            }`}>
+                            <Activity size={16} />
+                          </div>
+                          <div>
+                            <h4 className="text-xs font-black uppercase tracking-widest text-slate-300 mb-1">{insight.title}</h4>
+                            <p className="text-[11px] text-slate-500 font-medium leading-relaxed">{insight.description}</p>
+                          </div>
+                        </motion.div>
+                      ))}
+                    </div>
+
                     {/* Hero Chart Section */}
                     <div className="bg-slate-900/40 backdrop-blur-xl border border-white/5 rounded-[3rem] p-10 lg:p-12 relative overflow-hidden group">
                       <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-12 relative z-10">
@@ -281,23 +310,48 @@ export default function App() {
                           <p className="text-slate-500 font-bold mt-1"><span className="text-premium-400">{filters.date || 'Tarih Aralığı'}</span> için saatlik doluluk dağılımı</p>
                         </div>
 
-                        {selectedChannel && (
-                          <motion.button
-                            initial={{ scale: 0.8, opacity: 0 }}
-                            animate={{ scale: 1, opacity: 1 }}
-                            onClick={() => setSelectedChannel(null)}
-                            className="px-6 py-2.5 rounded-full border border-premium-500/30 text-premium-400 text-xs font-black uppercase tracking-widest hover:bg-premium-500/10 transition-all flex items-center gap-2"
-                          >
-                            Görünümü Sıfırla <Activity size={14} />
-                          </motion.button>
-                        )}
+                        <div className="flex items-center gap-4">
+                          <div className="flex p-1 bg-black/40 rounded-full border border-white/5 backdrop-blur-md">
+                            <button
+                              onClick={() => setViewMode('chart')}
+                              className={`px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest transition-all ${viewMode === 'chart' ? 'bg-premium-500 text-white shadow-lg' : 'text-slate-500 hover:text-slate-300'}`}
+                            >
+                              Grafik
+                            </button>
+                            <button
+                              onClick={() => setViewMode('heatmap')}
+                              className={`px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest transition-all ${viewMode === 'heatmap' ? 'bg-premium-500 text-white shadow-lg' : 'text-slate-500 hover:text-slate-300'}`}
+                            >
+                              Isı Haritası
+                            </button>
+                          </div>
+
+                          {selectedChannel && (
+                            <motion.button
+                              initial={{ scale: 0.8, opacity: 0 }}
+                              animate={{ scale: 1, opacity: 1 }}
+                              onClick={() => setSelectedChannel(null)}
+                              className="px-6 py-2.5 rounded-full border border-premium-500/30 text-premium-400 text-xs font-black uppercase tracking-widest hover:bg-premium-500/10 transition-all flex items-center gap-2"
+                            >
+                              Görünümü Sıfırla <Activity size={14} />
+                            </motion.button>
+                          )}
+                        </div>
                       </div>
 
-                      <div className="h-[450px] relative z-10 w-full">
+                      <div className="relative z-10 w-full text-center">
                         {detailData.length > 0 ? (
-                          <OccupancyChart data={detailData} />
+                          viewMode === 'chart' ? (
+                            <div className="h-[450px]">
+                              <OccupancyChart data={detailData} />
+                            </div>
+                          ) : (
+                            <div className="py-2">
+                              <HeatmapChart data={filteredData} />
+                            </div>
+                          )
                         ) : (
-                          <div className="h-full flex flex-col items-center justify-center text-slate-600 space-y-4 border border-dashed border-slate-800 rounded-3xl bg-black/20">
+                          <div className="h-[450px] flex flex-col items-center justify-center text-slate-600 space-y-4 border border-dashed border-slate-800 rounded-3xl bg-black/20">
                             <BarChart3 size={64} className="opacity-10" />
                             <p className="font-bold tracking-tight italic opacity-40">Veri bekleniyor...</p>
                           </div>
