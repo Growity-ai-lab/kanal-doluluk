@@ -101,16 +101,10 @@ export default function App() {
           <motion.div
             initial={{ opacity: 0, x: -20 }}
             animate={{ opacity: 1, x: 0 }}
-            className="flex items-center gap-4"
+            className="flex items-center"
           >
-            <div className="w-14 h-14 premium-gradient rounded-2xl flex items-center justify-center shadow-2xl shadow-premium-500/40 rotate-3 overflow-hidden border border-white/10 p-2">
-              <img src={`${import.meta.env.BASE_URL}favicon.png`} alt="Logo" className="w-full h-full object-contain" />
-            </div>
-            <div>
-              <h1 className="text-3xl font-black tracking-tighter uppercase leading-none">
-                Kanal <span className="bg-clip-text text-transparent bg-gradient-to-r from-premium-400 to-indigo-400">Doluluk</span>
-              </h1>
-              <p className="text-slate-500 text-sm font-bold tracking-widest mt-1 uppercase">Media Insight Engine v2.0</p>
+            <div className="h-20 flex items-center overflow-hidden">
+              <img src={`${import.meta.env.BASE_URL}logo.png`} alt="Kanal Doluluk Analizi Logo" className="h-full object-contain" />
             </div>
           </motion.div>
 
@@ -420,18 +414,8 @@ export default function App() {
 
         <footer className="max-w-[1600px] mx-auto mt-32 pb-20 border-t border-slate-800 pt-16 flex flex-col md:flex-row items-center justify-between gap-8 opacity-90">
           <div className="flex items-center gap-6">
-            <div className="flex items-center gap-4">
-              <div className="w-10 h-10 premium-gradient rounded-xl flex items-center justify-center border border-white/10 p-1.5 shadow-lg shadow-black/20">
-                <img src={`${import.meta.env.BASE_URL}favicon.png`} alt="Logo" className="w-full h-full object-contain" />
-              </div>
-              <div className="flex flex-col">
-                <h4 className="text-2xl font-black tracking-tighter text-white leading-none">
-                  Kanal <span className="text-[#ed217c]">Doluluk</span> <span className="text-[#7d3291]">Analizi</span>
-                </h4>
-                <p className="text-[10px] font-mono text-slate-500 uppercase tracking-[0.3em] font-bold mt-1">
-                  by Growity AI Studio
-                </p>
-              </div>
+            <div className="h-16 flex items-center">
+              <img src={`${import.meta.env.BASE_URL}logo.png`} alt="Logo" className="h-full opacity-80 hover:opacity-100 transition-opacity" />
             </div>
           </div>
           <p className="text-[10px] font-bold uppercase tracking-widest text-slate-600">
