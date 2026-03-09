@@ -104,7 +104,7 @@ export default function App() {
             className="flex items-center gap-4"
           >
             <div className="w-14 h-14 premium-gradient rounded-2xl flex items-center justify-center shadow-2xl shadow-premium-500/40 rotate-3 overflow-hidden border border-white/10 p-2">
-              <img src="./favicon.png" alt="Logo" className="w-full h-full object-contain" />
+              <img src={`${import.meta.env.BASE_URL}favicon.png`} alt="Logo" className="w-full h-full object-contain" />
             </div>
             <div>
               <h1 className="text-3xl font-black tracking-tighter uppercase leading-none">
@@ -422,7 +422,7 @@ export default function App() {
           <div className="flex items-center gap-6">
             <div className="flex items-center gap-4">
               <div className="w-10 h-10 premium-gradient rounded-xl flex items-center justify-center border border-white/10 p-1.5 shadow-lg shadow-black/20">
-                <img src="./favicon.png" alt="Logo" className="w-full h-full object-contain" />
+                <img src={`${import.meta.env.BASE_URL}favicon.png`} alt="Logo" className="w-full h-full object-contain" />
               </div>
               <div className="flex flex-col">
                 <h4 className="text-2xl font-black tracking-tighter text-white leading-none">
