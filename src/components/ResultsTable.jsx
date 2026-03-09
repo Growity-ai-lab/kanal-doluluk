@@ -2,7 +2,7 @@ import React from 'react';
 import { CheckCircle2, AlertTriangle, XCircle, ChevronRight, Monitor } from 'lucide-react';
 import { motion } from 'framer-motion';
 
-export default function ResultsTable({ data, onRowClick }) {
+export default function ResultsTable({ data, onRowClick, theme = 'dark' }) {
     // Group by channel
     const aggregated = data.reduce((acc, curr) => {
         const key = `${curr.kanal}_${curr.ptOpt}`;

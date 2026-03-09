@@ -398,6 +398,7 @@ export default function App() {
                         <ResultsTable
                           data={filteredData}
                           onRowClick={(channel) => setSelectedChannel(channel)}
+                          theme={theme}
                         />
                       </div>
                     </div>
