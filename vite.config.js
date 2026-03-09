@@ -10,7 +10,7 @@ export default defineConfig({
     tailwindcss(),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['vite.svg'],
+      includeAssets: ['favicon.png', 'pwa-icon.png'],
       manifest: {
         name: 'Kanal Doluluk Analizi',
         short_name: 'Doluluk',
@@ -20,12 +20,12 @@ export default defineConfig({
         display: 'standalone',
         icons: [
           {
-            src: 'pwa-192x192.png',
+            src: 'pwa-icon.png',
             sizes: '192x192',
             type: 'image/png'
           },
           {
-            src: 'pwa-512x512.png',
+            src: 'pwa-icon.png',
             sizes: '512x512',
             type: 'image/png',
             purpose: 'any maskable'
