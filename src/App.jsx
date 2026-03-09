@@ -103,8 +103,9 @@ export default function App() {
             animate={{ opacity: 1, x: 0 }}
             className="flex items-center gap-4"
           >
-            <div className="w-14 h-14 premium-gradient rounded-2xl flex items-center justify-center shadow-2xl shadow-premium-500/40 rotate-3">
-              <Activity className="text-white w-8 h-8" />
+          >
+            <div className="w-14 h-14 premium-gradient rounded-2xl flex items-center justify-center shadow-2xl shadow-premium-500/40 rotate-3 overflow-hidden border border-white/10 p-2">
+              <img src="/favicon.png" alt="Logo" className="w-full h-full object-contain" />
             </div>
             <div>
               <h1 className="text-3xl font-black tracking-tighter uppercase leading-none">
@@ -278,13 +279,13 @@ export default function App() {
                           animate={{ opacity: 1, x: 0 }}
                           transition={{ delay: idx * 0.1 }}
                           className={`p-5 rounded-3xl border backdrop-blur-md flex gap-4 items-start ${insight.impact === 'critical' ? 'bg-rose-500/5 border-rose-500/20' :
-                              insight.impact === 'high' ? 'bg-amber-500/5 border-amber-500/20' :
-                                'bg-premium-500/5 border-premium-500/20'
+                            insight.impact === 'high' ? 'bg-amber-500/5 border-amber-500/20' :
+                              'bg-premium-500/5 border-premium-500/20'
                             }`}
                         >
                           <div className={`mt-1 p-2 rounded-xl ${insight.impact === 'critical' ? 'bg-rose-500 text-white' :
-                              insight.impact === 'high' ? 'bg-amber-500 text-white' :
-                                'bg-premium-500 text-white'
+                            insight.impact === 'high' ? 'bg-amber-500 text-white' :
+                              'bg-premium-500 text-white'
                             }`}>
                             <Activity size={16} />
                           </div>
@@ -421,9 +422,8 @@ export default function App() {
         <footer className="max-w-[1600px] mx-auto mt-32 pb-20 border-t border-slate-800 pt-16 flex flex-col md:flex-row items-center justify-between gap-8 opacity-90">
           <div className="flex items-center gap-6">
             <div className="flex items-center gap-4">
-              <div className="relative w-12 h-8 flex items-center">
-                <div className="absolute left-0 w-7 h-7 rounded-full border-[4px] border-[#ed217c] mix-blend-screen"></div>
-                <div className="absolute left-4 w-7 h-7 rounded-full border-[4px] border-[#7d3291] mix-blend-screen"></div>
+              <div className="w-10 h-10 premium-gradient rounded-xl flex items-center justify-center border border-white/10 p-1.5 shadow-lg shadow-black/20">
+                <img src="/favicon.png" alt="Logo" className="w-full h-full object-contain" />
               </div>
               <div className="flex flex-col">
                 <h4 className="text-2xl font-black tracking-tighter text-white leading-none">
