@@ -5,14 +5,17 @@ export const InsightService = {
         const insights = [];
 
         // 1. Peak Occupancy Times
-        const hourlyAvg = data.reduce((acc, curr) => {
+        const validData = data.filter(d => d.saat && d.kanal && !isNaN(d.occupancyPercentage));
+
+        const hourlyAvg = validData.reduce((acc, curr) => {
             acc[curr.saat] = acc[curr.saat] || { total: 0, count: 0 };
             acc[curr.saat].total += curr.occupancyPercentage;
             acc[curr.saat].count += 1;
             return acc;
         }, {});
 
-        const peakHour = Object.entries(hourlyAvg).sort((a, b) => (b[1].total / b[1].count) - (a[1].total / a[1].count))[0];
+        const entries = Object.entries(hourlyAvg);
+        const peakHour = entries.length > 0 ? entries.sort((a, b) => (b[1].total / b[1].count) - (a[1].total / a[1].count))[0] : null;
         if (peakHour) {
             insights.push({
                 type: 'trend',
