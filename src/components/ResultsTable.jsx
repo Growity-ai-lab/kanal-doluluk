@@ -48,7 +48,7 @@ export default function ResultsTable({ data, onRowClick }) {
 
     return (
         <div className="w-full">
-            <div className="grid grid-cols-12 px-8 py-5 text-[10px] font-black text-slate-500 uppercase tracking-[0.2em] border-b border-white/5">
+            <div className={`grid grid-cols-12 px-8 py-5 text-[10px] font-black uppercase tracking-[0.2em] border-b transition-colors ${theme === 'dark' ? 'text-slate-500 border-white/5' : 'text-slate-400 border-slate-200'}`}>
                 <div className="col-span-5">İstasyon / Kanal</div>
                 <div className="col-span-3 text-center">Verimlilik</div>
                 <div className="col-span-4 text-right">Durum</div>
@@ -63,23 +63,23 @@ export default function ResultsTable({ data, onRowClick }) {
                             transition={{ delay: i * 0.03 }}
                             key={i}
                             onClick={() => onRowClick(row.kanal)}
-                            className="grid grid-cols-12 px-8 py-6 items-center hover:bg-premium-500/5 transition-all cursor-pointer group border-b border-white/[0.02]"
+                            className={`grid grid-cols-12 px-8 py-6 items-center transition-all cursor-pointer group border-b ${theme === 'dark' ? 'hover:bg-premium-500/5 border-white/[0.02]' : 'hover:bg-premium-500/5 border-slate-100'}`}
                         >
                             <div className="col-span-5 flex items-center gap-4">
                                 <div className={`w-8 h-8 rounded-lg flex items-center justify-center border transition-all ${row.ptOpt === 'PT' ? 'bg-indigo-500/10 border-indigo-500/20 text-indigo-400 group-hover:bg-indigo-500 group-hover:text-white' : 'bg-sky-500/10 border-sky-500/20 text-sky-400 group-hover:bg-sky-500 group-hover:text-white'}`}>
                                     <Monitor size={14} />
                                 </div>
                                 <div>
-                                    <h4 className="font-black text-slate-200 group-hover:text-white transition-colors tracking-tight">{row.kanal}</h4>
+                                    <h4 className={`font-black transition-colors tracking-tight ${theme === 'dark' ? 'text-slate-200 group-hover:text-white' : 'text-slate-700 group-hover:text-premium-600'}`}>{row.kanal}</h4>
                                     <span className="text-[9px] font-bold text-slate-500 uppercase tracking-widest">{row.ptOpt === 'ALL' ? 'GENEL' : row.ptOpt} segmenti</span>
                                 </div>
                             </div>
 
                             <div className="col-span-3 text-center">
-                                <div className="font-mono text-sm font-black text-slate-300 group-hover:text-premium-400 transition-colors">
+                                <div className={`font-mono text-sm font-black transition-colors ${theme === 'dark' ? 'text-slate-300 group-hover:text-premium-400' : 'text-slate-600 group-hover:text-premium-600'}`}>
                                     %{row.avg.toFixed(1)}
                                 </div>
-                                <div className="w-12 h-1 bg-slate-800 rounded-full mx-auto mt-1 overflow-hidden">
+                                <div className={`w-12 h-1 rounded-full mx-auto mt-1 overflow-hidden ${theme === 'dark' ? 'bg-slate-800' : 'bg-slate-200'}`}>
                                     <div className={`h-full ${status.dot} opacity-50`} style={{ width: `${Math.min(row.avg, 100)}%` }} />
                                 </div>
                             </div>

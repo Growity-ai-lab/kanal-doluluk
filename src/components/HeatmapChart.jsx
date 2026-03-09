@@ -1,7 +1,7 @@
 import React from 'react';
 import { motion } from 'framer-motion';
 
-export default function HeatmapChart({ data }) {
+export default function HeatmapChart({ data, theme = 'dark' }) {
     if (!data || data.length === 0) return null;
 
     // Filter valid data to prevent crashes
@@ -19,7 +19,7 @@ export default function HeatmapChart({ data }) {
     }, {});
 
     const getColor = (val) => {
-        if (val === undefined || val === null) return 'bg-slate-900/20';
+        if (val === undefined || val === null) return theme === 'dark' ? 'bg-slate-900/20' : 'bg-slate-200/50';
         if (val >= 95) return 'bg-rose-500';
         if (val >= 80) return 'bg-amber-500';
         if (val >= 40) return 'bg-premium-500';
@@ -35,7 +35,9 @@ export default function HeatmapChart({ data }) {
                     <div className="w-32 shrink-0"></div>
                     <div className="flex-1 flex justify-around">
                         {hours.map(h => (
-                            <span key={h} className="text-[9px] font-black text-slate-600 uppercase tracking-tighter w-full text-center">{String(h).padStart(2, '0')}h</span>
+                            <span key={h} className={`text-[9px] font-black uppercase tracking-tighter w-full text-center ${theme === 'dark' ? 'text-slate-600' : 'text-slate-400'}`}>
+                                {String(h).padStart(2, '0')}h
+                            </span>
                         ))}
                     </div>
                 </div>
@@ -50,7 +52,7 @@ export default function HeatmapChart({ data }) {
                             transition={{ delay: i * 0.02 }}
                             className="flex items-center group"
                         >
-                            <span className="w-32 shrink-0 text-[10px] font-bold text-slate-400 group-hover:text-white truncate pr-4 transition-colors">{ch}</span>
+                            <span className={`w-32 shrink-0 text-[10px] font-bold truncate pr-4 transition-colors ${theme === 'dark' ? 'text-slate-400 group-hover:text-white' : 'text-slate-500 group-hover:text-slate-900'}`}>{ch}</span>
                             <div className="flex-1 flex gap-1 h-6">
                                 {hours.map(h => {
                                     const val = dataMap[`${ch}_${h}`];

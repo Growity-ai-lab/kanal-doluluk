@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Activity, Upload, Database, BarChart3, Trash2, Download, FileSpreadsheet, FileText, Filter, ChevronRight, Share2, Info, LayoutDashboard, Monitor } from 'lucide-react';
+import { Activity, Upload, Database, BarChart3, Trash2, Download, FileSpreadsheet, FileText, Filter, ChevronRight, Share2, Info, LayoutDashboard, Monitor, Sun, Moon } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { StorageService } from './services/StorageService';
 import { FileProcessor } from './services/FileProcessor';
@@ -17,6 +17,12 @@ export default function App() {
   const [selectedChannel, setSelectedChannel] = useState(null);
   const [smartInsights, setSmartInsights] = useState([]);
   const [viewMode, setViewMode] = useState('chart'); // 'chart' or 'heatmap'
+  const [theme, setTheme] = useState(localStorage.getItem('theme') || 'dark');
+
+  useEffect(() => {
+    document.documentElement.classList.toggle('dark', theme === 'dark');
+    localStorage.setItem('theme', theme);
+  }, [theme]);
 
   useEffect(() => {
     loadInitialData();
@@ -88,7 +94,7 @@ export default function App() {
   const detailData = filteredData.filter(d => !selectedChannel || d.kanal === selectedChannel);
 
   return (
-    <div className="min-h-screen w-full bg-[#020617] text-slate-100 font-sans selection:bg-premium-500/30">
+    <div className={`min-h-screen w-full transition-colors duration-300 ${theme === 'dark' ? 'bg-[#020617] text-slate-100' : 'bg-slate-50 text-slate-900'} font-sans selection:bg-premium-500/30`}>
       {/* Dynamic Background */}
       <div className="fixed inset-0 overflow-hidden pointer-events-none opacity-30">
         <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-premium-600/20 rounded-full blur-[120px]" />
@@ -114,15 +120,22 @@ export default function App() {
             className="flex items-center gap-4"
           >
             <button
+              onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+              className={`p-3 rounded-2xl border transition-all flex items-center justify-center group ${theme === 'dark' ? 'border-slate-800 hover:bg-white/5 text-slate-400' : 'border-slate-200 hover:bg-black/5 text-slate-600'}`}
+              title={theme === 'dark' ? 'Aydınlık Mod' : 'Karanlık Mod'}
+            >
+              {theme === 'dark' ? <Sun size={20} /> : <Moon size={20} />}
+            </button>
+            <button
               onClick={handleClear}
-              className="px-6 py-3 rounded-2xl border border-slate-800 hover:border-red-500/50 hover:bg-red-500/5 transition-all flex items-center gap-2 group text-slate-400 hover:text-red-400 font-bold text-sm"
+              className={`px-6 py-3 rounded-2xl border transition-all flex items-center gap-2 group font-bold text-sm ${theme === 'dark' ? 'border-slate-800 hover:border-red-500/50 hover:bg-red-500/5 text-slate-400 hover:text-red-400' : 'border-slate-200 hover:border-red-500/50 hover:bg-red-500/5 text-slate-600 hover:text-red-500'}`}
             >
               <Trash2 size={18} className="group-hover:rotate-12 transition-transform" />
-              Verileri Sıfırla
+              Sıfırla
             </button>
             <button className="px-6 py-3 rounded-2xl premium-gradient text-white font-bold text-sm shadow-xl shadow-premium-500/20 hover:scale-105 active:scale-95 transition-all flex items-center gap-2">
               <Share2 size={18} />
-              Raporu Paylaş
+              Paylaş
             </button>
           </motion.div>
         </nav>
@@ -140,12 +153,12 @@ export default function App() {
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: i * 0.1 }}
-                className="bg-slate-900/40 backdrop-blur-xl border border-white/5 p-8 rounded-[2rem] relative group hover:border-premium-500/30 transition-all cursor-default"
+                className={`${theme === 'dark' ? 'bg-slate-900/40 border-white/5' : 'bg-white border-slate-200 shadow-sm'} backdrop-blur-xl border p-8 rounded-[2rem] relative group hover:border-premium-500/30 transition-all cursor-default`}
               >
                 <div className="flex items-center justify-between relative z-10">
                   <div>
-                    <p className="text-slate-500 text-xs font-black uppercase tracking-[0.2em]">{stat.label}</p>
-                    <p className="text-4xl font-black mt-2 tracking-tighter">{stat.value}</p>
+                    <p className={`text-[10px] font-black uppercase tracking-[0.2em] mb-1 ${theme === 'dark' ? 'text-slate-500' : 'text-slate-400'}`}>{stat.label}</p>
+                    <h3 className={`text-4xl font-black tracking-tighter ${theme === 'dark' ? 'text-white' : 'text-slate-900'}`}>{stat.value}</h3>
                   </div>
                   <div className={`w-16 h-16 rounded-2xl bg-gradient-to-br ${stat.color} flex items-center justify-center shadow-lg shadow-black/20 group-hover:scale-110 transition-transform`}>
                     <stat.icon size={32} className="text-white" />
@@ -194,28 +207,33 @@ export default function App() {
                 )}
               </motion.div>
 
-              {/* Control Center Card */}
+              {/* Ham Veri (Raw Data) Card */}
               <motion.div
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 transition={{ delay: 0.2 }}
-                className="bg-slate-900/40 backdrop-blur-xl border border-white/5 rounded-[2.5rem] p-10"
+                className={`${theme === 'dark' ? 'bg-slate-900/40 border-white/5' : 'bg-white border-slate-200 shadow-sm'} backdrop-blur-xl border rounded-[2.5rem] p-10 relative overflow-hidden flex flex-col`}
               >
-                <div className="flex items-center gap-3 mb-8">
-                  <div className="w-10 h-10 rounded-xl bg-premium-500/10 flex items-center justify-center border border-premium-500/20">
-                    <Filter className="text-premium-400" size={20} />
+                <div className="flex items-center gap-5 mb-10">
+                  <div className="w-14 h-14 rounded-2xl bg-emerald-500/10 flex items-center justify-center text-emerald-500 border border-emerald-500/20">
+                    <Database size={28} strokeWidth={2.5} />
                   </div>
-                  <h3 className="text-xl font-black uppercase tracking-tighter">Kontrol Merkezi</h3>
+                  <div>
+                    <h2 className={`text-3xl font-black tracking-tighter ${theme === 'dark' ? 'text-white' : 'text-slate-900'}`}>Ham Veri</h2>
+                    <p className={`text-[10px] font-bold uppercase tracking-[0.2em] mt-1 ${theme === 'dark' ? 'text-slate-500' : 'text-slate-400'}`}>Saniye Bazlı Kayıtlar</p>
+                  </div>
                 </div>
-
-                <div className="space-y-8">
+                <div className="flex-1 min-h-0">
+                  <ResultsTable data={filteredData} onRowClick={setSelectedChannel} theme={theme} />
+                </div>
+                <div className="space-y-8 mt-10">
                   <div className="space-y-3">
                     <label className="text-[10px] font-black text-slate-500 uppercase tracking-[0.3em] block ml-1">Analiz Tarihi</label>
                     <div className="relative">
                       <select
                         value={filters.date}
                         onChange={(e) => setFilters(p => ({ ...p, date: e.target.value }))}
-                        className="w-full bg-slate-950 border border-slate-800 rounded-2xl px-5 py-4 focus:ring-2 focus:ring-premium-500/50 outline-none transition-all appearance-none cursor-pointer font-bold text-slate-300"
+                        className={`w-full ${theme === 'dark' ? 'bg-slate-950 border-slate-800 text-slate-300' : 'bg-slate-100 border-slate-300 text-slate-700'} border rounded-2xl px-5 py-4 focus:ring-2 focus:ring-premium-500/50 outline-none transition-all appearance-none cursor-pointer font-bold`}
                         disabled={!uniqueDates.length}
                       >
                         <option value="" className="bg-slate-950 underline text-slate-500 text-sm">Tarih seçin</option>
@@ -227,12 +245,12 @@ export default function App() {
 
                   <div className="space-y-3">
                     <label className="text-[10px] font-black text-slate-500 uppercase tracking-[0.3em] block ml-1">Zaman Dilimi</label>
-                    <div className="p-1 bg-slate-950 rounded-[1.25rem] border border-slate-800 flex gap-1">
+                    <div className={`p-1 rounded-[1.25rem] border flex gap-1 ${theme === 'dark' ? 'bg-slate-950 border-slate-800' : 'bg-slate-100 border-slate-300'}`}>
                       {['ALL', 'OPT', 'PT'].map(mode => (
                         <button
                           key={mode}
                           onClick={() => setFilters(p => ({ ...p, ptOpt: mode }))}
-                          className={`flex-1 py-3 rounded-xl font-black text-xs transition-all ${filters.ptOpt === mode ? 'bg-premium-500 text-white shadow-xl shadow-premium-500/40' : 'text-slate-500 hover:text-slate-200'}`}
+                          className={`flex-1 py-3 rounded-xl font-black text-xs transition-all ${filters.ptOpt === mode ? 'bg-premium-500 text-white shadow-xl shadow-premium-500/40' : `${theme === 'dark' ? 'text-slate-500 hover:text-slate-200' : 'text-slate-600 hover:text-slate-900'}`}`}
                         >
                           {mode === 'ALL' ? 'TÜMÜ' : mode}
                         </button>
@@ -335,15 +353,13 @@ export default function App() {
 
                       <div className="relative z-10 w-full text-center">
                         {detailData.length > 0 ? (
-                          viewMode === 'chart' ? (
-                            <div className="h-[450px]">
-                              <OccupancyChart data={detailData} />
-                            </div>
-                          ) : (
-                            <div className="py-2">
-                              <HeatmapChart data={filteredData} />
-                            </div>
-                          )
+                          <div className="h-[450px] relative z-10">
+                            {viewMode === 'chart' ? (
+                              <OccupancyChart data={detailData} theme={theme} />
+                            ) : (
+                              <HeatmapChart data={filteredData} theme={theme} />
+                            )}
+                          </div>
                         ) : (
                           <div className="h-[450px] flex flex-col items-center justify-center text-slate-600 space-y-4 border border-dashed border-slate-800 rounded-3xl bg-black/20">
                             <BarChart3 size={64} className="opacity-10" />
@@ -356,16 +372,20 @@ export default function App() {
                       <div className="absolute top-0 right-0 w-64 h-64 bg-premium-500/5 blur-[80px] -mr-32 -mt-32 pointer-events-none" />
                     </div>
 
-                    {/* Table Section */}
-                    <div className="bg-slate-900/40 backdrop-blur-xl border border-white/5 rounded-[3rem] overflow-hidden">
-                      <div className="p-8 lg:p-10 border-b border-white/5 flex items-center justify-between">
-                        <div className="flex items-center gap-4">
-                          <div className="w-10 h-10 rounded-xl bg-premium-500/10 border border-premium-500/20 flex items-center justify-center text-premium-400">
-                            <FileSpreadsheet size={20} />
+                    {/* Haftalık Verimlilik (Weekly Productivity) Section */}
+                    <div className={`${theme === 'dark' ? 'bg-slate-900/40 border-white/5' : 'bg-white border-slate-200 shadow-sm'} backdrop-blur-xl border rounded-[2.5rem] p-10 relative overflow-hidden group`}
+                    >
+                      <div className="flex items-center justify-between mb-12 relative z-10">
+                        <div className="flex items-center gap-5">
+                          <div className="w-14 h-14 rounded-2xl bg-premium-500/10 flex items-center justify-center text-premium-500 border border-premium-500/20 group-hover:scale-110 group-hover:rotate-3 transition-all duration-500">
+                            <BarChart3 size={28} strokeWidth={2.5} />
                           </div>
-                          <h3 className="text-xl font-black uppercase tracking-tighter">Kanal Performansı</h3>
+                          <div>
+                            <h2 className={`text-3xl font-black tracking-tighter ${theme === 'dark' ? 'text-white' : 'text-slate-900'}`}>Haftalık Verimlilik</h2>
+                            <p className={`text-[10px] font-bold uppercase tracking-[0.2em] mt-1 ${theme === 'dark' ? 'text-slate-500' : 'text-slate-400'}`}>Segment Bazlı Analiz</p>
+                          </div>
                         </div>
-                        <div className="hidden md:flex gap-3">
+                        <div className={`p-1 w-fit rounded-xl border flex gap-1 ${theme === 'dark' ? 'bg-black/20 border-white/5' : 'bg-slate-100 border-slate-200'}`}>
                           <button className="p-2.5 rounded-xl border border-slate-800 text-slate-500 hover:text-slate-200 hover:bg-white/5 transition-all">
                             <Download size={20} />
                           </button>
