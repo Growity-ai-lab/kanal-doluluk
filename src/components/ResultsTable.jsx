@@ -97,10 +97,3 @@ export default function ResultsTable({ data, onRowClick }) {
         </div>
     );
 }
-                        </motion.div >
-                    );
-                })}
-            </div >
-        </div >
-    );
-}
