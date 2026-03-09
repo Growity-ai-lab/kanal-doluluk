@@ -5,16 +5,16 @@ export default function HeatmapChart({ data }) {
     if (!data || data.length === 0) return null;
 
     // Filter valid data to prevent crashes
-    const validData = data.filter(d => d.saat && d.kanal && d.occupancyPercentage !== undefined);
+    const validData = data.filter(d => d.hour !== undefined && d.kanal && d.occupancyPercentage !== undefined);
     if (validData.length === 0) return null;
 
     // Get unique channels and hours
     const channels = [...new Set(validData.map(d => d.kanal))].sort();
-    const hours = [...new Set(validData.map(d => d.saat))].sort((a, b) => String(a).localeCompare(String(b)));
+    const hours = [...new Set(validData.map(d => d.hour))].sort((a, b) => a - b);
 
     // Map data for easy lookup: { 'Channel_Hour': occupancy }
     const dataMap = validData.reduce((acc, curr) => {
-        acc[`${curr.kanal}_${curr.saat}`] = curr.occupancyPercentage;
+        acc[`${curr.kanal}_${curr.hour}`] = curr.occupancyPercentage;
         return acc;
     }, {});
 
@@ -35,7 +35,7 @@ export default function HeatmapChart({ data }) {
                     <div className="w-32 shrink-0"></div>
                     <div className="flex-1 flex justify-around">
                         {hours.map(h => (
-                            <span key={h} className="text-[9px] font-black text-slate-600 uppercase tracking-tighter w-full text-center">{h.split(':')[0]}h</span>
+                            <span key={h} className="text-[9px] font-black text-slate-600 uppercase tracking-tighter w-full text-center">{String(h).padStart(2, '0')}h</span>
                         ))}
                     </div>
                 </div>
@@ -54,10 +54,11 @@ export default function HeatmapChart({ data }) {
                             <div className="flex-1 flex gap-1 h-6">
                                 {hours.map(h => {
                                     const val = dataMap[`${ch}_${h}`];
+                                    const hourLabel = `${String(h).padStart(2, '0')}:00`;
                                     return (
                                         <div
                                             key={h}
-                                            title={`${ch} @ ${h}: %${val || 0}`}
+                                            title={`${ch} @ ${hourLabel}: %${(val || 0).toFixed(1)}`}
                                             className={`flex-1 rounded-sm transition-all duration-300 hover:scale-110 hover:z-20 border border-black/20 ${getColor(val)}`}
                                         />
                                     );

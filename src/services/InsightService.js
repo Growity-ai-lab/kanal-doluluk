@@ -5,22 +5,23 @@ export const InsightService = {
         const insights = [];
 
         // 1. Peak Occupancy Times
-        const validData = data.filter(d => d.saat && d.kanal && !isNaN(d.occupancyPercentage));
+        const validData = data.filter(d => d.hour !== undefined && d.kanal && !isNaN(d.occupancyPercentage));
 
         const hourlyAvg = validData.reduce((acc, curr) => {
-            acc[curr.saat] = acc[curr.saat] || { total: 0, count: 0 };
-            acc[curr.saat].total += curr.occupancyPercentage;
-            acc[curr.saat].count += 1;
+            acc[curr.hour] = acc[curr.hour] || { total: 0, count: 0 };
+            acc[curr.hour].total += curr.occupancyPercentage;
+            acc[curr.hour].count += 1;
             return acc;
         }, {});
 
         const entries = Object.entries(hourlyAvg);
         const peakHour = entries.length > 0 ? entries.sort((a, b) => (b[1].total / b[1].count) - (a[1].total / a[1].count))[0] : null;
         if (peakHour) {
+            const hourLabel = `${String(peakHour[0]).padStart(2, '0')}:00`;
             insights.push({
                 type: 'trend',
                 title: 'Zirve Doluluk Noktası',
-                description: `Grup genelinde en yoğun doluluk saat ${peakHour[0]} civarında gerçekleşiyor (Ortalama %${Math.round(peakHour[1].total / peakHour[1].count)}).`,
+                description: `Grup genelinde en yoğun doluluk saat ${hourLabel} civarında gerçekleşiyor (Ortalama %${Math.round(peakHour[1].total / peakHour[1].count)}).`,
                 impact: 'high'
             });
         }
