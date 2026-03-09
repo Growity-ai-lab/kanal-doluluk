@@ -3,8 +3,10 @@ import { Activity, Upload, Database, BarChart3, Trash2, Download, FileSpreadshee
 import { motion, AnimatePresence } from 'framer-motion';
 import { StorageService } from './services/StorageService';
 import { FileProcessor } from './services/FileProcessor';
+import { InsightService } from './services/InsightService';
 import ResultsTable from './components/ResultsTable';
 import OccupancyChart from './components/OccupancyChart';
+import HeatmapChart from './components/HeatmapChart';
 
 export default function App() {
   const [ratingData, setRatingData] = useState([]);
@@ -13,6 +15,8 @@ export default function App() {
   const [stats, setStats] = useState({ channels: 0, dates: 0, avg: 0 });
   const [filters, setFilters] = useState({ date: '', ptOpt: 'ALL' });
   const [selectedChannel, setSelectedChannel] = useState(null);
+  const [smartInsights, setSmartInsights] = useState([]);
+  const [viewMode, setViewMode] = useState('chart'); // 'chart' or 'heatmap'
 
   useEffect(() => {
     loadInitialData();
