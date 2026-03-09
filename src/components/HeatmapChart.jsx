@@ -4,23 +4,27 @@ import { motion } from 'framer-motion';
 export default function HeatmapChart({ data }) {
     if (!data || data.length === 0) return null;
 
+    // Filter valid data to prevent crashes
+    const validData = data.filter(d => d.saat && d.kanal && d.occupancyPercentage !== undefined);
+    if (validData.length === 0) return null;
+
     // Get unique channels and hours
-    const channels = [...new Set(data.map(d => d.kanal))].sort();
-    const hours = [...new Set(data.map(d => d.saat))].sort((a, b) => a.localeCompare(b));
+    const channels = [...new Set(validData.map(d => d.kanal))].sort();
+    const hours = [...new Set(validData.map(d => d.saat))].sort((a, b) => String(a).localeCompare(String(b)));
 
     // Map data for easy lookup: { 'Channel_Hour': occupancy }
-    const dataMap = data.reduce((acc, curr) => {
+    const dataMap = validData.reduce((acc, curr) => {
         acc[`${curr.kanal}_${curr.saat}`] = curr.occupancyPercentage;
         return acc;
     }, {});
 
     const getColor = (val) => {
-        if (val === undefined) return 'bg-slate-900/20';
-        if (val >= 90) return 'bg-rose-500';
-        if (val >= 70) return 'bg-amber-500';
+        if (val === undefined || val === null) return 'bg-slate-900/20';
+        if (val >= 95) return 'bg-rose-500';
+        if (val >= 80) return 'bg-amber-500';
         if (val >= 40) return 'bg-premium-500';
-        if (val >= 10) return 'bg-emerald-500';
-        return 'bg-emerald-500/30';
+        if (val >= 1) return 'bg-emerald-500';
+        return 'bg-emerald-500/20';
     };
 
     return (
