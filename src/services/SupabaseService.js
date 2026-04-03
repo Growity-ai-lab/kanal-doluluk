@@ -16,7 +16,10 @@ export const SupabaseService = {
       .from(bucketName)
       .list('', { limit: 1000, offset: 0, sortBy: { column: 'updated_at', order: 'desc' } });
 
-    if (error) throw error;
+    if (error) {
+      console.warn('⚠️ listFiles error (RLS policy may be missing):', error.message);
+      return [];
+    }
     return data || [];
   },
 
@@ -27,10 +30,19 @@ export const SupabaseService = {
     return data;
   },
 
+  async downloadViaPublicUrl(path) {
+    if (!client) throw new Error('Supabase client is not initialized');
+    const url = this.getPublicUrl(path);
+    if (!url) throw new Error('Could not get public URL');
+    console.log('📥 Downloading via public URL:', url);
+    const response = await fetch(url, { cache: 'no-cache' });
+    if (!response.ok) throw new Error(`Download failed: ${response.status}`);
+    return response.blob();
+  },
+
   getPublicUrl(path) {
     if (!client) throw new Error('Supabase client is not initialized');
-    const { data, error } = client.storage.from(bucketName).getPublicUrl(path);
-    if (error) throw error;
+    const { data } = client.storage.from(bucketName).getPublicUrl(path);
     return data?.publicUrl ?? null;
   },
 };

@@ -53,15 +53,18 @@ export default function App() {
       console.log('📁 Files found:', files.length);
       setHistoryFiles(files);
 
-      if (!files.length) {
-        console.warn('⚠️ No files in Supabase bucket');
-        return false;
+      let blob;
+      if (files.length > 0) {
+        const latest = files[0];
+        console.log('📄 Downloading latest file:', latest.name);
+        blob = await SupabaseService.downloadFile(latest.name);
+      } else {
+        // listFiles may return empty due to missing RLS policy, try direct public URL
+        console.log('📥 Trying direct public URL download...');
+        blob = await SupabaseService.downloadViaPublicUrl('kanal-doluluk.xlsx');
       }
-
-      const latest = files[0];
-      console.log('📄 Downloading latest file:', latest.name);
-      const blob = await SupabaseService.downloadFile(latest.name);
-      const file = new File([blob], latest.name, {
+      const fileName = files.length > 0 ? files[0].name : 'kanal-doluluk.xlsx';
+      const file = new File([blob], fileName, {
         type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
       });
 
