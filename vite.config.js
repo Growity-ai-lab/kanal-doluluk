@@ -5,6 +5,27 @@ import { VitePWA } from 'vite-plugin-pwa'
 
 export default defineConfig({
   base: '/',
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          'vendor': [
+            'react',
+            'react-dom',
+            '@supabase/supabase-js'
+          ],
+          'charts': [
+            'chart.js',
+            'react-chartjs-2'
+          ],
+          'utils': [
+            'xlsx'
+          ]
+        }
+      }
+    },
+    chunkSizeWarningLimit: 600
+  },
   plugins: [
     react(),
     tailwindcss(),
