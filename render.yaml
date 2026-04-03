@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: kanal-doluluk
+    env: node
+    plan: pro
+    buildCommand: npm install && npm run build
+    startCommand: npm run preview
+    preDeployCommand: npm ci
+    envVars:
+      - key: VITE_SUPABASE_URL
+        scope: all
+      - key: VITE_SUPABASE_ANON_KEY
+        scope: all
