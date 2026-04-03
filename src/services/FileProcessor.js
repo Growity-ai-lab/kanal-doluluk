@@ -4,7 +4,8 @@ import { format, parse } from 'date-fns';
 const MAX_AD_DURATION_PER_HOUR = 720; // 12 mins per hour limit
 
 const getPtOptType = (hour) => {
-    if (hour < 7 || hour > 25) return null;
+    if (hour > 25) return null;
+    // OPT: 07:00-17:59, PT: 18:00-25:59 and 02:00-06:59
     return (hour >= 7 && hour < 18) ? 'OPT' : 'PT';
 };
 
@@ -12,8 +13,10 @@ const parseTimeValue = (val) => {
     if (!val) return null;
     const str = String(val).trim();
     if (str.includes(':')) {
-        const [h, m] = str.split(':');
-        return { hour: parseInt(h, 10), minute: parseInt(m, 10) };
+        const parts = str.split(':').map(p => parseInt(p, 10));
+        if (parts.length >= 2) {
+            return { hour: parts[0], minute: parts[1], second: parts[2] || 0 };
+        }
     }
     if (str.length >= 4) {
         return { hour: parseInt(str.substring(0, 2), 10), minute: parseInt(str.substring(2, 4), 10) };
@@ -59,7 +62,14 @@ export const FileProcessor = {
                             const dt = XLSX.SSF.parse_date_code(tarihVal);
                             tarih = `${dt.y}-${String(dt.m).padStart(2, '0')}-${String(dt.d).padStart(2, '0')}`;
                         } else {
-                            tarih = String(tarihVal || '');
+                            const raw = String(tarihVal || '').trim();
+                            // Handle DD.MM.YYYY format
+                            const dotMatch = raw.match(/^(\d{1,2})\.(\d{1,2})\.(\d{4})$/);
+                            if (dotMatch) {
+                                tarih = `${dotMatch[3]}-${dotMatch[2].padStart(2, '0')}-${dotMatch[1].padStart(2, '0')}`;
+                            } else {
+                                tarih = raw;
+                            }
                         }
 
                         const baslangic = String(row[8] || '');
