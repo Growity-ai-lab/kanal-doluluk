@@ -20,8 +20,17 @@ export default function App() {
   const [viewMode, setViewMode] = useState('chart'); // 'chart' or 'heatmap'
   const [theme, setTheme] = useState(localStorage.getItem('theme') || 'dark');
   const [historyFiles, setHistoryFiles] = useState([]);
+  const [error, setError] = useState(null);
 
   const REMOTE_DATA_URL = `${import.meta.env.BASE_URL}data/kanal-doluluk.xlsx`;
+
+  // Debug: Environment variables kontrolü
+  useEffect(() => {
+    console.log('🔍 Environment Check:');
+    console.log('VITE_SUPABASE_URL:', import.meta.env.VITE_SUPABASE_URL);
+    console.log('VITE_SUPABASE_ANON_KEY:', import.meta.env.VITE_SUPABASE_ANON_KEY ? 'Set' : 'Not set');
+    console.log('SupabaseService.isEnabled:', SupabaseService.isEnabled);
+  }, []);
 
   useEffect(() => {
     document.documentElement.classList.toggle('dark', theme === 'dark');
@@ -33,20 +42,33 @@ export default function App() {
   }, []);
 
   const loadSupabaseData = async () => {
-    if (!SupabaseService.isEnabled) return false;
+    if (!SupabaseService.isEnabled) {
+      console.warn('⚠️ Supabase not enabled - falling back to local data');
+      return false;
+    }
 
     try {
+      console.log('📡 Loading from Supabase...');
       const files = await SupabaseService.listFiles();
+      console.log('📁 Files found:', files.length);
       setHistoryFiles(files);
-      if (!files.length) return false;
+
+      if (!files.length) {
+        console.warn('⚠️ No files in Supabase bucket');
+        return false;
+      }
 
       const latest = files[0];
+      console.log('📄 Downloading latest file:', latest.name);
       const blob = await SupabaseService.downloadFile(latest.name);
       const file = new File([blob], latest.name, {
         type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
       });
 
+      console.log('🔄 Processing Excel file...');
       const { ratingData: newR, occupancyData: newO } = await FileProcessor.processExcel(file);
+      console.log('✅ Data processed:', { rating: newR.length, occupancy: newO.length });
+
       await StorageService.saveRatingData(newR);
       await StorageService.saveOccupancyData(newO);
       setRatingData(newR);
@@ -56,29 +78,43 @@ export default function App() {
 
       const dates = [...new Set(newO.map((d) => d.tarih))].sort().reverse();
       setFilters((prev) => ({ ...prev, date: dates[0] }));
+
+      console.log('🎉 Supabase data loaded successfully');
       return true;
     } catch (err) {
-      console.warn('Supabase yüklemesi başarısız:', err.message);
+      console.error('❌ Supabase load error:', err);
+      setError(`Supabase yükleme hatası: ${err.message}`);
       return false;
     }
   };
 
   const loadInitialData = async () => {
-    const rData = await StorageService.loadRatingData();
-    const oData = await StorageService.loadOccupancyData();
-    setRatingData(rData || []);
-    setOccupancyData(oData || []);
-    calculateStats(oData || []);
-    setSmartInsights(InsightService.getInsights(oData || []));
+    console.log('🚀 Loading initial data...');
+    try {
+      // Önce local veriyi yükle
+      const rData = await StorageService.loadRatingData();
+      const oData = await StorageService.loadOccupancyData();
+      console.log('💾 Local data loaded:', { rating: rData?.length || 0, occupancy: oData?.length || 0 });
 
-    if (oData && oData.length > 0) {
-      const dates = [...new Set(oData.map(d => d.tarih))].sort().reverse();
-      setFilters((prev) => ({ ...prev, date: dates[0] }));
-    }
+      setRatingData(rData || []);
+      setOccupancyData(oData || []);
+      calculateStats(oData || []);
+      setSmartInsights(InsightService.getInsights(oData || []));
 
-    const supabaseLoaded = await loadSupabaseData();
-    if (!supabaseLoaded) {
-      await refreshFromRemote();
+      if (oData && oData.length > 0) {
+        const dates = [...new Set(oData.map(d => d.tarih))].sort().reverse();
+        setFilters((prev) => ({ ...prev, date: dates[0] }));
+      }
+
+      // Supabase'den veri çekmeyi dene
+      const supabaseLoaded = await loadSupabaseData();
+      if (!supabaseLoaded) {
+        console.log('🔄 Falling back to remote static file...');
+        await refreshFromRemote();
+      }
+    } catch (err) {
+      console.error('❌ Initial data load error:', err);
+      setError(`Veri yükleme hatası: ${err.message}`);
     }
   };
 
@@ -196,6 +232,36 @@ export default function App() {
       </div>
 
       <div className="relative z-10 p-4 md:p-8 lg:p-12">
+        {error && (
+          <div className="max-w-[1600px] mx-auto mb-6 bg-red-50 border border-red-200 rounded-lg p-4">
+            <div className="flex items-center">
+              <div className="flex-shrink-0">
+                <svg className="h-5 w-5 text-red-400" viewBox="0 0 20 20" fill="currentColor">
+                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                </svg>
+              </div>
+              <div className="ml-3">
+                <h3 className="text-sm font-medium text-red-800">
+                  Veri Yükleme Hatası
+                </h3>
+                <div className="mt-2 text-sm text-red-700">
+                  {error}
+                </div>
+                <div className="mt-4">
+                  <div className="-mx-2 -my-1.5 flex">
+                    <button
+                      onClick={() => window.location.reload()}
+                      className="bg-red-50 px-2 py-1.5 rounded-md text-sm font-medium text-red-800 hover:bg-red-100 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-red-50 focus:ring-red-600"
+                    >
+                      Sayfayı Yenile
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Navigation / Header */}
         <nav className="max-w-[1600px] mx-auto mb-16 flex flex-col md:flex-row items-center justify-between gap-6">
           <motion.div
