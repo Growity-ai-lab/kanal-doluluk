@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { Activity, Upload, Database, BarChart3, Trash2, Download, FileSpreadsheet, FileText, Filter, ChevronRight, Share2, Info, LayoutDashboard, Monitor, Sun, Moon } from 'lucide-react';
+import { Activity, Database, BarChart3, Trash2, Download, FileSpreadsheet, FileText, Filter, ChevronRight, Share2, Info, LayoutDashboard, Monitor, Sun, Moon } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { StorageService } from './services/StorageService';
 import { FileProcessor } from './services/FileProcessor';
+import { SupabaseService } from './services/SupabaseService';
 import { InsightService } from './services/InsightService';
 import ResultsTable from './components/ResultsTable';
 import OccupancyChart from './components/OccupancyChart';
@@ -18,6 +19,9 @@ export default function App() {
   const [smartInsights, setSmartInsights] = useState([]);
   const [viewMode, setViewMode] = useState('chart'); // 'chart' or 'heatmap'
   const [theme, setTheme] = useState(localStorage.getItem('theme') || 'dark');
+  const [historyFiles, setHistoryFiles] = useState([]);
+
+  const REMOTE_DATA_URL = `${import.meta.env.BASE_URL}data/kanal-doluluk.xlsx`;
 
   useEffect(() => {
     document.documentElement.classList.toggle('dark', theme === 'dark');
@@ -27,6 +31,37 @@ export default function App() {
   useEffect(() => {
     loadInitialData();
   }, []);
+
+  const loadSupabaseData = async () => {
+    if (!SupabaseService.isEnabled) return false;
+
+    try {
+      const files = await SupabaseService.listFiles();
+      setHistoryFiles(files);
+      if (!files.length) return false;
+
+      const latest = files[0];
+      const blob = await SupabaseService.downloadFile(latest.name);
+      const file = new File([blob], latest.name, {
+        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      });
+
+      const { ratingData: newR, occupancyData: newO } = await FileProcessor.processExcel(file);
+      await StorageService.saveRatingData(newR);
+      await StorageService.saveOccupancyData(newO);
+      setRatingData(newR);
+      setOccupancyData(newO);
+      calculateStats(newO);
+      setSmartInsights(InsightService.getInsights(newO));
+
+      const dates = [...new Set(newO.map((d) => d.tarih))].sort().reverse();
+      setFilters((prev) => ({ ...prev, date: dates[0] }));
+      return true;
+    } catch (err) {
+      console.warn('Supabase yüklemesi başarısız:', err.message);
+      return false;
+    }
+  };
 
   const loadInitialData = async () => {
     const rData = await StorageService.loadRatingData();
@@ -38,7 +73,12 @@ export default function App() {
 
     if (oData && oData.length > 0) {
       const dates = [...new Set(oData.map(d => d.tarih))].sort().reverse();
-      setFilters(prev => ({ ...prev, date: dates[0] }));
+      setFilters((prev) => ({ ...prev, date: dates[0] }));
+    }
+
+    const supabaseLoaded = await loadSupabaseData();
+    if (!supabaseLoaded) {
+      await refreshFromRemote();
     }
   };
 
@@ -50,12 +90,65 @@ export default function App() {
     setStats({ channels, dates, avg: Math.round(avg) });
   };
 
-  const handleFileUpload = async (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
+  const loadRemoteData = async () => {
+    const response = await fetch(REMOTE_DATA_URL, { cache: 'no-cache' });
+    if (!response.ok) {
+      throw new Error(`Uzak veri alınamadı: ${response.status} ${response.statusText}`);
+    }
+
+    const blob = await response.blob();
+    const file = new File([blob], 'kanal-doluluk.xlsx', {
+      type: blob.type || 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    });
+
+    return FileProcessor.processExcel(file);
+  };
+
+  const refreshFromRemote = async () => {
+    setLoading(true);
+    try {
+      const { ratingData: newR, occupancyData: newO } = await loadRemoteData();
+
+      const existingHash = JSON.stringify(occupancyData);
+      const remoteHash = JSON.stringify(newO);
+
+      if (existingHash !== remoteHash) {
+        await StorageService.saveRatingData(newR);
+        await StorageService.saveOccupancyData(newO);
+        setRatingData(newR);
+        setOccupancyData(newO);
+        calculateStats(newO);
+        setSmartInsights(InsightService.getInsights(newO));
+
+        const dates = [...new Set(newO.map(d => d.tarih))].sort().reverse();
+        setFilters((prev) => ({ ...prev, date: dates[0] }));
+      }
+    } catch (err) {
+      console.error('Uzak veri yüklenirken hatası:', err);
+      alert('Uzak veri yüklenirken hata oluştu: ' + err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleRefresh = async () => {
+    if (SupabaseService.isEnabled) {
+      await loadSupabaseData();
+      return;
+    }
+    await refreshFromRemote();
+  };
+
+  const handleLoadHistoryFile = async (fileName) => {
+    if (!SupabaseService.isEnabled || !fileName) return;
 
     setLoading(true);
     try {
+      const blob = await SupabaseService.downloadFile(fileName);
+      const file = new File([blob], fileName, {
+        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      });
+
       const { ratingData: newR, occupancyData: newO } = await FileProcessor.processExcel(file);
       await StorageService.saveRatingData(newR);
       await StorageService.saveOccupancyData(newO);
@@ -64,10 +157,11 @@ export default function App() {
       calculateStats(newO);
       setSmartInsights(InsightService.getInsights(newO));
 
-      const dates = [...new Set(newO.map(d => d.tarih))].sort().reverse();
-      setFilters(prev => ({ ...prev, date: dates[0] }));
+      const dates = [...new Set(newO.map((d) => d.tarih))].sort().reverse();
+      setFilters((prev) => ({ ...prev, date: dates[0] }));
     } catch (err) {
-      alert("Hata: " + err.message);
+      console.error('Geçmiş dosya yüklenirken hata:', err);
+      alert('Geçmiş dosya yüklenirken hata oluştu: ' + err.message);
     } finally {
       setLoading(false);
     }
@@ -172,36 +266,57 @@ export default function App() {
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-10">
             {/* Left Column: Input & Filters */}
             <div className="lg:col-span-4 space-y-10">
-              {/* Uploader Card */}
+              {/* Central data source card */}
               <motion.div
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
-                className="bg-slate-900/40 backdrop-blur-xl border-2 border-dashed border-slate-800 rounded-[2.5rem] p-10 hover:border-premium-500 transition-all group relative cursor-pointer"
+                className="bg-slate-900/40 backdrop-blur-xl border-2 border-dashed border-slate-800 rounded-[2.5rem] p-10 hover:border-premium-500 transition-all group relative"
               >
-                <input
-                  type="file"
-                  className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-20"
-                  onChange={handleFileUpload}
-                  accept=".xlsx,.xls,.csv"
-                />
                 <div className="flex flex-col items-center text-center space-y-6">
                   <div className="w-24 h-24 rounded-3xl bg-premium-500/10 flex items-center justify-center group-hover:bg-premium-500/20 transition-all border border-premium-500/20">
-                    <Upload className="text-premium-400 w-12 h-12 group-hover:-translate-y-2 transition-transform duration-300" />
+                    <Database className="text-premium-400 w-12 h-12" />
                   </div>
                   <div className="space-y-2">
-                    <h3 className="text-2xl font-black">Veri Yükleme</h3>
-                    <p className="text-slate-500 font-medium">Excel veya CSV dosyalarınızı buraya bırakın</p>
+                    <h3 className="text-2xl font-black">Merkezi Veri Kaynağı</h3>
+                    <p className="text-slate-500 font-medium">
+                      {SupabaseService.isEnabled
+                        ? 'Supabase Storage bucketı "kanal-doluluk" kullanılıyor. En yeni dosya seçilir.'
+                        : 'Veri dosyası: /data/kanal-doluluk.xlsx (statik fallback)'}
+                    </p>
+                    <p className="text-slate-400 text-sm">Yönetici bu dosyayı güncellediğinde "Yenile" butonuyla herkeste senkron olacaktır.</p>
                   </div>
-                  <div className="flex gap-3">
-                    <span className="px-3 py-1.5 rounded-lg bg-emerald-500/10 text-emerald-400 text-[10px] font-black border border-emerald-500/20">XLSX / CSV</span>
-                    <span className="px-3 py-1.5 rounded-lg bg-rose-500/10 text-rose-400 text-[10px] font-black border border-rose-500/20">PDF RAPOR</span>
-                  </div>
+                  <button
+                    onClick={handleRefresh}
+                    className="px-6 py-3 rounded-xl bg-premium-500 text-white font-bold uppercase tracking-wider shadow-lg shadow-premium-500/30 hover:scale-105 transition-transform"
+                  >
+                    Veriyi Yenile
+                  </button>
+
+                  {SupabaseService.isEnabled && historyFiles.length > 0 && (
+                    <div className="mt-6 text-left w-full">
+                      <h4 className="text-sm font-bold text-premium-200 mb-2">Geçmiş Dosyalar</h4>
+                      <ul className="max-h-40 overflow-y-auto text-left rounded-xl border border-premium-500/20 bg-slate-950/20 p-3">
+                        {historyFiles.map((file) => (
+                          <li key={file.name} className="flex items-center justify-between mb-1">
+                            <span className="text-xs text-slate-300">{file.name}</span>
+                            <button
+                              onClick={() => handleLoadHistoryFile(file.name)}
+                              className="text-[10px] font-black uppercase tracking-wider px-2 py-1 rounded-md bg-premium-500/90 hover:bg-premium-400"
+                            >
+                              Yükle
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+
                 </div>
                 {loading && (
                   <div className="absolute inset-0 bg-slate-950/90 backdrop-blur-md rounded-[2.5rem] z-30 flex items-center justify-center">
                     <div className="text-center">
                       <div className="w-14 h-14 border-4 border-premium-500 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
-                      <p className="text-premium-400 font-black tracking-widest uppercase text-sm">İşleniyor...</p>
+                      <p className="text-premium-400 font-black tracking-widest uppercase text-sm">Veri çekiliyor...</p>
                     </div>
                   </div>
                 )}
