@@ -109,12 +109,21 @@ export default function App() {
       // Supabase'den veri çekmeyi dene
       const supabaseLoaded = await loadSupabaseData();
       if (!supabaseLoaded) {
-        console.log('🔄 Falling back to remote static file...');
-        await refreshFromRemote();
+        console.log('🔄 Attempting fallback: loading from remote static file...');
+        try {
+          await refreshFromRemote();
+        } catch (remoteErr) {
+          console.warn('Both Supabase and remote file failed');
+          // If cache has data, use it. Otherwise show error.
+          if (!oData || oData.length === 0) {
+            const errorMsg = 'Veri kaynaklari kapali. Supabase ayarlarini dogrulayin veya yoneticiye bildirin.';
+            setError(errorMsg);
+          }
+        }
       }
     } catch (err) {
-      console.error('❌ Initial data load error:', err);
-      setError(`Veri yükleme hatası: ${err.message}`);
+      console.error('Initial data load error:', err);
+      setError('Veri yukleme hatasi: ' + err.message);
     }
   };
 
@@ -127,17 +136,29 @@ export default function App() {
   };
 
   const loadRemoteData = async () => {
-    const response = await fetch(REMOTE_DATA_URL, { cache: 'no-cache' });
-    if (!response.ok) {
-      throw new Error(`Uzak veri alınamadı: ${response.status} ${response.statusText}`);
+    console.log('🔗 Attempting to load remote data from:', REMOTE_DATA_URL);
+    try {
+      const response = await fetch(REMOTE_DATA_URL, { cache: 'no-cache' });
+      if (!response.ok) {
+        if (response.status === 404) {
+          console.warn('Remote file not found (404). Fallback Excel file not deployed.');
+          console.info('To fix: Upload kanal-doluluk.xlsx to public/data/ or use Supabase instead.');
+          throw new Error('Fallback Excel dosyasi bulunamadi. Supabase kullaniniz veya yonetici ile iletisime geciniz.');
+        }
+        throw new Error('Uzak veri alinamadi: ' + response.status + ' ' + response.statusText);
+      }
+
+      const blob = await response.blob();
+      const file = new File([blob], 'kanal-doluluk.xlsx', {
+        type: blob.type || 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      });
+
+      console.log('✅ Remote file fetched successfully, processing...');
+      return FileProcessor.processExcel(file);
+    } catch (err) {
+      console.error('❌ Remote data load failed:', err.message);
+      throw err;
     }
-
-    const blob = await response.blob();
-    const file = new File([blob], 'kanal-doluluk.xlsx', {
-      type: blob.type || 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-    });
-
-    return FileProcessor.processExcel(file);
   };
 
   const refreshFromRemote = async () => {
