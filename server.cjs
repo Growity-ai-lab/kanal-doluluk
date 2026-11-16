@@ -3,7 +3,9 @@ const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
 const { timingSafeEqual, randomUUID } = require('node:crypto');
-const { gzipSync, gunzipSync } = require('node:zlib');
+const zlib = require('node:zlib');
+const { gzipSync, gunzipSync } = zlib;
+const { once } = require('node:events');
 const root = path.join(__dirname,'public');
 const env = process.env;
 const secrets = [env.ADMIN_PASSWORD, env.INGEST_TOKEN];
@@ -51,11 +53,35 @@ function takeSnapshot(reason) {
   finally { fs.rmSync(staged,{force:true}); }
   for (const old of listSnapshots().slice(snapKeep)) fs.rmSync(path.join(snapDir,old.name),{force:true});
 }
-// reason verilirse yazmadan once anlik goruntu alinir; goruntu alinamazsa islem iptal edilir.
-function save(next,reason) {
+// Arsivi parca parca serilestirip sikistirir; parcalar arasinda olay dongusune birakir, boylece buyuk arsivde
+// diger istekler (sayfa acma, filtreleme) yazim sirasinda beklemez ve tek bir dev JSON dizgisi olusmaz.
+async function serialize(next) {
+  const gz = zlib.createGzip({level:3}), chunks = [];
+  gz.on('data',c=>chunks.push(c));
+  const finished = new Promise((resolve,reject)=>{gz.on('end',resolve);gz.on('error',reject);});
+  const { rows, ...rest } = next;
+  const put = async s => { if (!gz.write(s)) await once(gz,'drain'); };
+  await put('{"rows":[');
+  for (let i=0;i<rows.length;i+=20000) {
+    await put((i?',':'')+JSON.stringify(rows.slice(i,i+20000)).slice(1,-1));
+    await new Promise(setImmediate);
+  }
+  await put('],'+JSON.stringify(rest).slice(1));
+  gz.end(); await finished;
+  return Buffer.concat(chunks);
+}
+// Durum degistiren islemler (yukleme, kural, geri yukleme) sirayla calisir; yazim sirasinda baska bir islem eski durumu okumaz.
+let queue = Promise.resolve();
+function exclusive(task) {
+  const run = queue.then(task);
+  queue = run.catch(()=>{});
+  return run;
+}
+// reason verilirse yazmadan once anlik goruntu alinir; goruntu alinamazsa islem iptal edilir. Yalnizca exclusive() icinde cagrilir.
+async function save(next,reason) {
   if (reason) takeSnapshot(reason);
   const staged = stateFile+'.'+randomUUID()+'.tmp';
-  const zipped = gzipSync(JSON.stringify(next));
+  const zipped = await serialize(next);
   try { fs.writeFileSync(staged,zipped,{mode:0o600}); fs.renameSync(staged,stateFile); }
   finally { fs.rmSync(staged,{force:true}); }
   state=next; snapshot=zipped;
@@ -197,12 +223,14 @@ http.createServer(async(req,res)=>{
       if(route==='/api/restore') {
         const name=url.searchParams.get('name')||'';
         if(!snapName.test(name)||!listSnapshots().some(s=>s.name===name)) throw bad('Anlik goruntu bulunamadi.',404);
-        let restored;
-        try {restored=JSON.parse(gunzipSync(fs.readFileSync(path.join(snapDir,name))));} catch {throw bad('Anlik goruntu okunamadi.');}
-        normalize(restored);
-        save(restored,'restore');
-        auth.audit('restore',ctx,{snapshot:name,total:restored.rows.length});
-        return send(res,200,{ok:true,total:restored.rows.length});
+        return await exclusive(async()=>{
+          let restored;
+          try {restored=JSON.parse(gunzipSync(fs.readFileSync(path.join(snapDir,name))));} catch {throw bad('Anlik goruntu okunamadi.');}
+          normalize(restored);
+          await save(restored,'restore');
+          auth.audit('restore',ctx,{snapshot:name,total:restored.rows.length});
+          return send(res,200,{ok:true,total:restored.rows.length});
+        });
       }
       if(route==='/api/import') {
         const mode=machine?'replace':(url.searchParams.get('mode')||'append');
@@ -210,22 +238,26 @@ http.createServer(async(req,res)=>{
         if(!['append','replace'].includes(mode)||(mode==='replace'&&(!date(start)||!date(end)||end<start||Date.parse(end)-Date.parse(start)>366*86400000))) throw bad('Gecersiz yenileme araligi.');
         const body=await read(req,35*1024*1024);
         if(body.length<4||body.readUInt32LE(0)!==0x04034b50) throw bad('Gecerli bir XLSX dosyasi secin.');
-        let m;
-        try {m=parseImport(body,{mode,start,end,requireDays:machine,expected:machine?state.expectedChannels:[],complete:!machine&&url.searchParams.get('complete')==='1'});}
-        catch(err) {auth.audit('import-rejected',ctx,{mode,start,end,bytes:body.length,reason:String(err.message).slice(0,200)});throw err;}
-        save({...state,rows:m.rows,coverage:m.coverage,verified:m.verified,updatedAt:new Date().toISOString(),updatedBy:who.username},machine?'import-auto':'import-'+mode);
-        auth.audit('import',ctx,{mode,start,end,complete:!machine&&url.searchParams.get('complete')==='1',bytes:body.length,added:m.added,updated:m.updated,skipped:m.skipped,total:m.rows.length,missingChannels:m.missingChannels});
-        return send(res,200,{added:m.added,updated:m.updated,skipped:m.skipped,total:m.rows.length,missingChannels:m.missingChannels});
+        return await exclusive(async()=>{
+          let m;
+          try {m=parseImport(body,{mode,start,end,requireDays:machine,expected:machine?state.expectedChannels:[],complete:!machine&&url.searchParams.get('complete')==='1'});}
+          catch(err) {auth.audit('import-rejected',ctx,{mode,start,end,bytes:body.length,reason:String(err.message).slice(0,200)});throw err;}
+          await save({...state,rows:m.rows,coverage:m.coverage,verified:m.verified,updatedAt:new Date().toISOString(),updatedBy:who.username},machine?'import-auto':'import-'+mode);
+          auth.audit('import',ctx,{mode,start,end,complete:!machine&&url.searchParams.get('complete')==='1',bytes:body.length,added:m.added,updated:m.updated,skipped:m.skipped,total:m.rows.length,missingChannels:m.missingChannels});
+          return send(res,200,{added:m.added,updated:m.updated,skipped:m.skipped,total:m.rows.length,missingChannels:m.missingChannels});
+        });
       }
       const raw=await read(req,512*1024);
       let input;
       try {input=JSON.parse(raw);} catch {throw bad('Gecersiz kural verisi.');}
       if(!input||!input.rules||Array.isArray(input.rules)||typeof input.rules!=='object'||!Array.isArray(input.expectedChannels)||input.expectedChannels.length>40||input.expectedChannels.some(c=>typeof c!=='string'||!c.trim()||c.length>60)||Object.entries(input.rules).some(([k,v])=>k.length>320||!k.includes('|')||!['include','exclude','review'].includes(v))) throw bad('Gecersiz kural verisi.');
       const expectedChannels=[...new Set(input.expectedChannels.map(c=>c.trim()))];
-      const changed=[...new Set([...Object.keys(state.rules),...Object.keys(input.rules)])].filter(k=>state.rules[k]!==input.rules[k]);
-      save({...state,rules:input.rules,expectedChannels});
-      auth.audit('rules',ctx,{changed:changed.slice(0,30).map(k=>k+' -> '+(input.rules[k]||'silindi')),changedCount:changed.length,expectedChannels});
-      return send(res,200,{ok:true});
+      return await exclusive(async()=>{
+        const changed=[...new Set([...Object.keys(state.rules),...Object.keys(input.rules)])].filter(k=>state.rules[k]!==input.rules[k]);
+        await save({...state,rules:input.rules,expectedChannels});
+        auth.audit('rules',ctx,{changed:changed.slice(0,30).map(k=>k+' -> '+(input.rules[k]||'silindi')),changedCount:changed.length,expectedChannels});
+        return send(res,200,{ok:true});
+      });
     }
     send(res,404,{error:'Bulunamadi.'});
   } catch(err) {

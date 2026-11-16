@@ -129,9 +129,12 @@ async function ingest(label, p, ck, start, days, mode) {
   const url = mode === 'machine' ? '/api/import?start=' + start + '&end=' + end : '/api/import?mode=append&start=&end=&complete=1';
   const headers = mode === 'machine' ? { Authorization: 'Bearer ' + env0.INGEST_TOKEN } : { Cookie: ck, 'X-Panel-Request': '1' };
   const before = proc(p.pid);
-  const r = await probed(async () => { const res = await fetch(base + url, { method: 'POST', headers, body: buf }); return { status: res.status, body: await res.text() }; });
+  // Istemci uzun sure bos kaldiktan sonra sunucunun kapattigi eski baglantiyi kullanabilir; sunucu ayaktaysa bir kez yeniden dene.
+  const send = async () => { const res = await fetch(base + url, { method: 'POST', headers, body: buf }); return { status: res.status, body: await res.text() }; };
+  let retried = false;
+  const r = await probed(async () => { try { return await send(); } catch (e) { if (p.exitCode !== null || !/fetch failed/.test(e.message)) throw e; retried = true; return send(); } });
   const after = p.exitCode === null ? proc(p.pid) : { rss: 0, hwm: 0 };
-  return { label, xlsxMB: +(buf.length / 1048576).toFixed(1), rows: days * PER_DAY, ms: Math.round(r.ms), stallMs: Math.round(r.stallMs), status: r.result && r.result.status, error: r.error, rssMB: MB(after.rss), peakMB: MB(after.hwm), peakGrowthMB: MB(after.hwm - before.hwm), crashed: p.exitCode !== null };
+  return { label, xlsxMB: +(buf.length / 1048576).toFixed(1), rows: days * PER_DAY, ms: Math.round(r.ms), stallMs: Math.round(r.stallMs), status: r.result && r.result.status, error: r.error, rssMB: MB(after.rss), peakMB: MB(after.hwm), peakGrowthMB: MB(after.hwm - before.hwm), crashed: p.exitCode !== null, retried };
 }
 
 async function clientSide(ck, rowsHint) {
@@ -195,7 +198,7 @@ async function browserCheck(ck, dataDir) {
         if (s.p.exitCode !== null) break;
         const x = await ingest(label, s.p, ck, isoDay(nextStart, cursor), n, mode); cursor += n;
         r.ingests.push(x);
-        console.log('   yukleme ' + label + ': ' + x.ms + ' ms, en uzun duraklama ' + x.stallMs + ' ms, xlsx ' + x.xlsxMB + ' MB, RSS ' + x.rssMB + ' MB, tepe ' + x.peakMB + ' MB, HTTP ' + x.status + (x.error ? ' HATA ' + x.error : '') + (x.crashed ? ' SUNUCU COKTU' : ''));
+        console.log('   yukleme ' + label + ': ' + x.ms + ' ms, en uzun duraklama ' + x.stallMs + ' ms, xlsx ' + x.xlsxMB + ' MB, RSS ' + x.rssMB + ' MB, tepe ' + x.peakMB + ' MB, HTTP ' + x.status + (x.error ? ' HATA ' + x.error : '') + (x.crashed ? ' SUNUCU COKTU' : '') + (x.retried ? ' (eski baglanti, yeniden denendi)' : ''));
       }
       r.diskMB = MB(dirBytes(dataDir) + dirBytes(path.join(dataDir, 'snapshots')));
       console.log('   disk (arsiv + anlik goruntuler): ' + r.diskMB + ' MB');

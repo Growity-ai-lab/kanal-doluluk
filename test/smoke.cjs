@@ -176,6 +176,34 @@ const post=(p,auth,body,header=true)=>req(p,auth,{method:'POST',body,headers:hea
  const locked=await login('hedef.kisi','yanlis-sifre-123456789');
  assert.equal(locked.status,429);assert.ok(Number(locked.headers.get('retry-after'))>0);
  assert.equal((await login('admin',env.ADMIN_PASSWORD)).status,200);
+
+ // Tekrar kontrolu yalniz gelen dosyanin gunleriyle yapilir; sonuc yine dogru olmalidir
+ const append='/api/import?mode=append&start=&end=&complete=0';
+ const imp=async(buf)=>{const r=await post(append,admin,buf);assert.equal(r.status,200,await r.clone().text());return r.json();};
+ let r1=await imp(book(['2026-12-01','2026-12-02'],30));
+ assert.deepEqual([r1.added,r1.skipped,r1.updated],[2,0,0]);
+ r1=await imp(book(['2026-12-02','2026-12-03'],30));
+ assert.deepEqual([r1.added,r1.skipped,r1.updated],[1,1,0]);
+ r1=await imp(book(['2026-12-02','2026-12-03'],45));
+ assert.deepEqual([r1.added,r1.skipped,r1.updated],[0,0,2]);
+ // Ayni anda gelen iki yukleme siraya girer; ikisi de arsive islenir (kayip guncelleme olmaz)
+ const [pa,pb]=await Promise.all([post(append,admin,book(['2026-12-10'],30)),post(append,admin,book(['2026-12-11'],30))]);
+ assert.equal(pa.status,200);assert.equal(pb.status,200);
+ const dates=async()=>new Set((await (await req('/api/state',viewer)).json()).rows.map(r=>r[6]));
+ let have=await dates();
+ assert.ok(have.has('2026-12-10')&&have.has('2026-12-11'));
+ // 20 bin satirdan buyuk arsiv parca parca yazilir ve yeniden baslatmada aynen okunur
+ const bigRows=Array.from({length:25000},(_,i)=>['Atv','Gıda','Gıda','Örnek '+(i%7),'Ürün','Marka '+(i%11),'2026-12-20','Normal Spot','Kusak Spot',String(Math.floor((25200+i)/3600)).padStart(2,'0')+':'+String(Math.floor((25200+i)%3600/60)).padStart(2,'0')+':'+String((25200+i)%60).padStart(2,'0'),String(Math.floor((25200+i+10)/3600)).padStart(2,'0')+':'+String(Math.floor((25200+i+10)%3600/60)).padStart(2,'0')+':'+String((25200+i+10)%60).padStart(2,'0'),10]);
+ const bw=XLSX.utils.book_new();XLSX.utils.book_append_sheet(bw,XLSX.utils.aoa_to_sheet([headers,...bigRows]));
+ const big=await imp(XLSX.write(bw,{type:'buffer',bookType:'xlsx',compression:true}));
+ assert.equal(big.added,25000);
+ const beforeRestart=await (await req('/api/state',viewer)).json();
+ await stop();await start();
+ const afterRestart=await (await req('/api/state',viewer)).json();
+ assert.equal(afterRestart.rows.length,beforeRestart.rows.length);
+ assert.deepEqual(afterRestart.rows.at(-1),beforeRestart.rows.at(-1));
+ assert.deepEqual(afterRestart.coverage,beforeRestart.coverage);
+ assert.deepEqual(afterRestart.rules,beforeRestart.rules);
  if(process.env.TEST_ADEX_XLSX){
    const sample=await post('/api/import',admin,fs.readFileSync(process.env.TEST_ADEX_XLSX));
    assert.equal(sample.status,200,await sample.clone().text());

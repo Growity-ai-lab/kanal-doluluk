@@ -63,15 +63,19 @@ Admin, panelde **Ayarlar → Anlık görüntüler** bölümünden bir kopyayı g
 
 `npm run scale` sentetik ADEX arşivi üretir (varsayılan günde ~3.500 satır, 15 kanal), sunucuyu bu arşivle başlatır ve bellek, açılış, yükleme süresi, olay döngüsü duraklaması ve tarayıcı tarafı hesabını ölçer. Seçenekler: `--days=90,365,730`, `--rows-per-day=N`, `--heap=384` (Render Starter'a benzetmek için sunucu heap sınırı), `--browser --browser-days=365` (gerçek Chromium ölçümü; `playwright` gerekir), `--out=sonuc.json`. `npm test`'e dahil değildir.
 
-İlk ölçüm (4 CPU / 16 GB makine, günde 3.500 satır varsayımıyla; gerçek günlük satır sayınızla tekrarlayın):
+Ölçüm (4 CPU / 16 GB makine, günde 3.500 satır varsayımıyla; gerçek günlük satır sayınızla tekrarlayın). Sunucu belleği satır başına yaklaşık 0,75 KB'tır:
 
-| Arşiv | Satır | Sunucu boşta RSS | 1 günlük otomatik aktarım | Aktarımda tepe bellek | Tarayıcıya inen durum |
-|---|---|---|---|---|---|
-| 90 gün | 315 bin | 304 MB | 1,4 sn | 560 MB (7 gün) / 1 GB (31 gün) | 39 MB (5,5 MB gzip) |
-| 365 gün | 1,28 milyon | 965 MB | 5,6 sn | 1,7 GB | 158 MB (22 MB gzip) |
-| 730 gün | 2,55 milyon | 1,8 GB | 13 sn (7 gün) | 2,6–2,9 GB | 316 MB (45 MB gzip) |
+| Arşiv | Satır | Sunucu boşta RSS | 1 günlük otomatik aktarım (donma) | Aylık dosya yükleme (donma) | Aktarımda tepe bellek | Tarayıcıya inen durum |
+|---|---|---|---|---|---|---|
+| 365 gün | 1,28 milyon | 0,97 GB | 0,4 sn | 4,0 sn | 1,2 GB | 158 MB (22 MB gzip) |
+| 730 gün | 2,55 milyon | 1,8 GB | 0,5 sn | 4,9 sn | 2,0 GB | 316 MB (45 MB gzip) |
+| 1095 gün | 3,83 milyon | 2,7 GB | — | 4,8 sn | 3,0 GB | 474 MB (67 MB gzip) |
 
-Aktarım sırasında sunucu tek iş parçacığında çalıştığı için tüm istekler aktarım süresince bekler. `--heap=384` ile 90 günlük arşivde aylık dosya yüklemesi, 180 günlük arşivde ilk günlük aktarım sunucuyu çökertir.
+"Donma", aktarım sırasında diğer isteklerin (sayfa açma, filtreleme) beklediği en uzun süredir. Aylık dosyadaki süre XLSX'in ayrıştırılmasından gelir ve arşiv boyutundan bağımsızdır. Tekrar-kontrolü yalnızca gelen dosyanın günleri için yapılır, arşiv parça parça yazılır ve durum değiştiren işlemler (yükleme, kural, geri yükleme) sırayla çalışır. Bu iyileştirmeden önce 1 yıllık arşivde günlük aktarım 5,5 sn, aylık dosya 10,7 sn donduruyordu; tepe bellek 1,7–1,9 GB idi.
+
+Tarayıcı tarafı değişmedi: 1 yıllık arşivde tarayıcı yaklaşık 1,5 GB bellek kullanır ve her açılışta 22 MB iner.
+
+**Render planı:** 3 yıla kadar geçmiş 4 GB'lık Pro planında bellekte tutulabilir. Node'un heap sınırını açıkça belirleyin: Render'da `NODE_OPTIONS=--max-old-space-size=3072` ortam değişkenini tanımlayın (bu repodaki `render.yaml` hâlâ `starter` planı içerir; Pro'da çalışan servisinizin ayarını panelden yapın). 512 MB'lık Starter'da 90 günden uzun geçmiş sunucuyu çökertebilir (`--heap=384` ile ölçüldü).
 
 ## Yerel çalıştırma
 
