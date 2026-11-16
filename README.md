@@ -36,6 +36,7 @@ Güncel ADEX betiğinde başarılı aktarım logundan sonra, Excel dosyası kapa
 try {
     $renderResult = & (Join-Path $PSScriptRoot 'Render-Gonder.ps1') -ExcelPath $file -StartDate $fromDay -EndDate $day
     Log "RENDER BASARILI: $($renderResult.total) ortak kayit"
+    if ($renderResult.warning) { Log "RENDER UYARI: $($renderResult.warning)" }
     if ($renderResult.missingChannels.Count) { Log "RENDER UYARI: dosyada eksik kanallar: $($renderResult.missingChannels -join ', ')" }
 } catch {
     Log "RENDER HATA: $($_.Exception.Message)"
@@ -58,6 +59,16 @@ Ayarlar ekranındaki **Beklenen kanallar** listesi doldurulursa, otomatik aktar�
 Her veri yüklemesinden (panel veya otomatik aktarım) önce mevcut arşivin kopyası `DATA_DIR/snapshots` klasörüne alınır. Son `SNAPSHOT_KEEP` adet saklanır (varsayılan 14; ortam değişkeniyle değiştirilir). Görüntü alınamazsa yükleme yapılmaz; doğrulamada reddedilen yüklemeler görüntü oluşturmaz.
 
 Admin, panelde **Ayarlar → Anlık görüntüler** bölümünden bir kopyayı geri yükleyebilir; geri yüklemeden önce mevcut hâl de kopyalanır, yani geri alma da geri alınabilir. Kural değişiklikleri görüntü almaz. Görüntüler aynı diskte durur: `render.yaml`'daki 1 GB disk, arşiv boyutunun `SNAPSHOT_KEEP + 1` katını karşılamalı. Disk bozulursa bu bir yedek değildir; Render disk anlık görüntüsünü de kullanın.
+
+## Saklama süresi ve temizlik
+
+Arşiv ham spot satırlarını **6 ay (183 gün)** tutmak üzere tasarlanmıştır; günlük ve haftalık karşılaştırmalar için bu yeterlidir. Sınır `RETENTION_DAYS` ortam değişkeniyle değişir. Arşivdeki en eski ve en yeni kayıt arası bu süreyi aşarsa:
+
+- Yöneticiye sayfanın üstünde ve **Veri yükle** penceresinde uyarı gösterilir (yükleme yine de yapılabilir).
+- Otomatik aktarım yanıtında `warning` alanı döner; yukarıdaki PowerShell örneği bunu `RENDER UYARI` olarak loglar.
+- Uyarıdaki **Eski kayıtları temizle** düğmesi, son kayıttan geriye `RETENTION_DAYS` günden eski satırları siler. Önce kaç kaydın silineceği gösterilir ve onay istenir. Silmeden önce otomatik anlık görüntü alınır (**Ayarlar → Anlık görüntüler**'den geri yüklenir) ve işlem denetim kaydına yazılır.
+
+Arşiv kendiliğinden silinmez; temizlik her zaman yöneticinin onayıyla yapılır. Ölçüme göre 6 ay (~640 bin satır, günde 3.500 satır varsayımıyla) sunucuda yaklaşık 0,5 GB boşta bellek ve ~1 GB aktarım tepesi demektir.
 
 ## Ölçek testi
 

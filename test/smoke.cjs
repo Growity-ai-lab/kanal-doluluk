@@ -6,7 +6,7 @@ const {spawn}=require('node:child_process');
 const {once}=require('node:events');
 const XLSX=require('../public/xlsx.full.min.js');
 const data=fs.mkdtempSync(path.join(os.tmpdir(),'kanal-test-'));
-const env={...process.env,PORT:'18357',DATA_DIR:data,ADMIN_PASSWORD:'test-admin-01234567890',INGEST_TOKEN:'test-ingest-01234567890',SNAPSHOT_KEEP:'3',LOGIN_MAX_FAILS:'4'};
+const env={...process.env,PORT:'18357',DATA_DIR:data,ADMIN_PASSWORD:'test-admin-01234567890',INGEST_TOKEN:'test-ingest-01234567890',SNAPSHOT_KEEP:'3',LOGIN_MAX_FAILS:'4',RETENTION_DAYS:'30'};
 let admin='',viewer='';const bot='Bearer '+env.INGEST_TOKEN;
 const authHeader=a=>!a?{}:/^(Bearer|Basic) /.test(a)?{Authorization:a}:{Cookie:a};
 const req=(p,auth,options={})=>fetch('http://localhost:18357'+p,{...options,headers:{...options.headers,...authHeader(auth)}});
@@ -59,7 +59,7 @@ const post=(p,auth,body,header=true)=>req(p,auth,{method:'POST',body,headers:hea
  assert.equal((await post('/api/users',admin,JSON.stringify({op:'create',username:'ali.veli',password:VIEWER_PASS,role:'admin'}),false)).status,403);
  assert.equal((await req('/',viewer)).status,200);
  assert.equal((await req('/worker.js',viewer)).status,200);
- assert.deepEqual(await (await req('/api/session',viewer)).json(),{admin:false,username:'ayse.yilmaz',role:'viewer',breakGlass:false});
+ assert.deepEqual(await (await req('/api/session',viewer)).json(),{admin:false,username:'ayse.yilmaz',role:'viewer',breakGlass:false,retentionDays:30});
  assert.equal((await (await req('/api/session',admin)).json()).admin,true);
  const one=book(['2026-11-12'],30);
  assert.equal((await post('/api/import',viewer,one)).status,403);
@@ -182,6 +182,7 @@ const post=(p,auth,body,header=true)=>req(p,auth,{method:'POST',body,headers:hea
  const imp=async(buf)=>{const r=await post(append,admin,buf);assert.equal(r.status,200,await r.clone().text());return r.json();};
  let r1=await imp(book(['2026-12-01','2026-12-02'],30));
  assert.deepEqual([r1.added,r1.skipped,r1.updated],[2,0,0]);
+ assert.equal(r1.warning,undefined); // arsiv araligi saklama sinirinin icinde
  r1=await imp(book(['2026-12-02','2026-12-03'],30));
  assert.deepEqual([r1.added,r1.skipped,r1.updated],[1,1,0]);
  r1=await imp(book(['2026-12-02','2026-12-03'],45));
@@ -197,6 +198,7 @@ const post=(p,auth,body,header=true)=>req(p,auth,{method:'POST',body,headers:hea
  const bw=XLSX.utils.book_new();XLSX.utils.book_append_sheet(bw,XLSX.utils.aoa_to_sheet([headers,...bigRows]));
  const big=await imp(XLSX.write(bw,{type:'buffer',bookType:'xlsx',compression:true}));
  assert.equal(big.added,25000);
+ assert.match(big.warning,/saklama siniri 30 gun/); // 2026-11-12 ... 2026-12-20 = 39 gun
  const beforeRestart=await (await req('/api/state',viewer)).json();
  await stop();await start();
  const afterRestart=await (await req('/api/state',viewer)).json();
@@ -204,6 +206,29 @@ const post=(p,auth,body,header=true)=>req(p,auth,{method:'POST',body,headers:hea
  assert.deepEqual(afterRestart.rows.at(-1),beforeRestart.rows.at(-1));
  assert.deepEqual(afterRestart.coverage,beforeRestart.coverage);
  assert.deepEqual(afterRestart.rules,beforeRestart.rules);
+
+ // Saklama siniri ve temizlik: yalniz yonetici; once onizleme, sonra anlik goruntu alinarak silme
+ assert.equal((await post('/api/prune?keep=30',viewer,'{}')).status,403);
+ assert.equal((await post('/api/prune?keep=3',admin,'{}')).status,400);
+ const preview=await (await post('/api/prune?keep=30&dry=1',admin,'{}')).json();
+ assert.equal(preview.dry,true);assert.equal(preview.cutoff,'2026-11-21');assert.ok(preview.removed>0);
+ assert.equal((await (await req('/api/state',viewer)).json()).rows.length,afterRestart.rows.length); // onizleme silmez
+ const snapsBefore=(await (await req('/api/snapshots',admin)).json()).snapshots[0].name;
+ const pruned=await (await post('/api/prune?keep=30',admin,'{}')).json();
+ assert.equal(pruned.removed,preview.removed);
+ const afterPrune=await (await req('/api/state',viewer)).json();
+ assert.equal(afterPrune.rows.length,afterRestart.rows.length-pruned.removed);
+ assert.ok(afterPrune.rows.every(r=>r[6]>='2026-11-21'));
+ assert.ok(afterPrune.coverage.every(k=>k.split('|').pop()>='2026-11-21')&&afterPrune.verified.every(k=>k.split('|').pop()>='2026-11-21'));
+ const snapAfter=(await (await req('/api/snapshots',admin)).json()).snapshots[0];
+ assert.notEqual(snapAfter.name,snapsBefore);assert.equal(snapAfter.reason,'prune');
+ assert.ok((await (await req('/api/audit?event=prune',admin)).json()).entries.some(e=>e.user==='admin'&&e.detail.removed===pruned.removed));
+ assert.equal((await (await post('/api/prune?keep=30',admin,'{}')).json()).removed,0); // ikinci temizlik bir sey silmez
+ // Temizlik anlik goruntuden geri alinabilir
+ assert.equal((await post('/api/restore?name='+snapAfter.name,admin,'')).status,200);
+ assert.equal((await (await req('/api/state',viewer)).json()).rows.length,afterRestart.rows.length);
+ const afterPruneImport=await (await post(append,admin,book(['2026-12-21'],30))).json();
+ assert.equal(afterPruneImport.warning,'Arsivde 40 gunluk kayit var (2026-11-12 - 2026-12-21); saklama siniri 30 gun. Eski kayitlari panelden temizleyin.');
  if(process.env.TEST_ADEX_XLSX){
    const sample=await post('/api/import',admin,fs.readFileSync(process.env.TEST_ADEX_XLSX));
    assert.equal(sample.status,200,await sample.clone().text());

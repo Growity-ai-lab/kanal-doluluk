@@ -38,6 +38,21 @@ if (normalize(state)) snapshot = gzipSync(JSON.stringify(state));
 const snapDir = path.join(dir,'snapshots');
 fs.mkdirSync(snapDir,{recursive:true});
 const snapKeep = Math.max(1,Number(env.SNAPSHOT_KEEP)||14);
+// Saklama siniri: arsivdeki en eski ve en yeni kayit arasi bu gunu asarsa yoneticiye temizlik uyarisi verilir.
+const retentionDays = Math.max(7,Number(env.RETENTION_DAYS)||183);
+let spanCache = {ref:null,val:null};
+function archiveSpan() {
+  if (spanCache.ref === state) return spanCache.val;
+  let first = '', last = '';
+  for (const r of state.rows) { const d = r[6]; if (!first || d < first) first = d; if (d > last) last = d; }
+  const days = first ? Math.round((Date.parse(last)-Date.parse(first))/86400000)+1 : 0;
+  spanCache = {ref:state,val:{first,last,days,rows:state.rows.length}};
+  return spanCache.val;
+}
+function retentionWarning() {
+  const s = archiveSpan();
+  return s.days > retentionDays ? 'Arsivde '+s.days+' gunluk kayit var ('+s.first+' - '+s.last+'); saklama siniri '+retentionDays+' gun. Eski kayitlari panelden temizleyin.' : undefined;
+}
 const snapName = /^\d{8}T\d{9}Z-[a-z-]+\.json\.gz$/;
 function listSnapshots() {
   return fs.readdirSync(snapDir).filter(n=>snapName.test(n)).sort().reverse().map(name=>{
@@ -174,7 +189,7 @@ http.createServer(async(req,res)=>{
       res.writeHead(200,{'Content-Type':name.endsWith('.html')?'text/html; charset=utf-8':'application/javascript; charset=utf-8'});
       return res.end(fs.readFileSync(path.join(root,name)));
     }
-    if(route==='/api/session'&&method==='GET'&&me) return send(res,200,{admin:isAdmin,username:me.username,role:me.role,breakGlass:me.breakGlass});
+    if(route==='/api/session'&&method==='GET'&&me) return send(res,200,{admin:isAdmin,username:me.username,role:me.role,breakGlass:me.breakGlass,retentionDays});
     if(route==='/api/logout'&&method==='POST'&&me) {
       panel(req);
       auth.audit('logout',ctx);
@@ -218,8 +233,26 @@ http.createServer(async(req,res)=>{
       res.writeHead(200,{'Content-Type':'application/json','Content-Encoding':'gzip'});
       return res.end(snapshot);
     }
-    if(method==='POST'&&['/api/import','/api/rules','/api/restore'].includes(route)) {
+    if(method==='POST'&&['/api/import','/api/rules','/api/restore','/api/prune'].includes(route)) {
       if(!machine) {needAdmin(); panel(req);}
+      if(route==='/api/prune') {
+        const keep=Number(url.searchParams.get('keep')||retentionDays), dry=url.searchParams.get('dry')==='1';
+        if(!Number.isInteger(keep)||keep<7||keep>1100) throw bad('Gecersiz saklama suresi.');
+        return await exclusive(async()=>{
+          const {last}=archiveSpan();
+          if(!last) return send(res,200,{removed:0,kept:0,cutoff:null,dry});
+          const cutoff=new Date(Date.parse(last+'T12:00:00Z')-(keep-1)*86400000).toISOString().slice(0,10);
+          const dayOf=k=>k.slice(k.lastIndexOf('|')+1);
+          const rows=state.rows.filter(r=>r[6]>=cutoff);
+          const coverage=state.coverage.filter(k=>dayOf(k)>=cutoff), verified=state.verified.filter(k=>dayOf(k)>=cutoff);
+          const removed=state.rows.length-rows.length;
+          if(!dry&&(removed||coverage.length!==state.coverage.length||verified.length!==state.verified.length)) {
+            await save({...state,rows,coverage,verified},'prune');
+            auth.audit('prune',ctx,{keep,cutoff,removed,kept:rows.length});
+          }
+          return send(res,200,{removed,kept:rows.length,cutoff,dry});
+        });
+      }
       if(route==='/api/restore') {
         const name=url.searchParams.get('name')||'';
         if(!snapName.test(name)||!listSnapshots().some(s=>s.name===name)) throw bad('Anlik goruntu bulunamadi.',404);
@@ -244,7 +277,7 @@ http.createServer(async(req,res)=>{
           catch(err) {auth.audit('import-rejected',ctx,{mode,start,end,bytes:body.length,reason:String(err.message).slice(0,200)});throw err;}
           await save({...state,rows:m.rows,coverage:m.coverage,verified:m.verified,updatedAt:new Date().toISOString(),updatedBy:who.username},machine?'import-auto':'import-'+mode);
           auth.audit('import',ctx,{mode,start,end,complete:!machine&&url.searchParams.get('complete')==='1',bytes:body.length,added:m.added,updated:m.updated,skipped:m.skipped,total:m.rows.length,missingChannels:m.missingChannels});
-          return send(res,200,{added:m.added,updated:m.updated,skipped:m.skipped,total:m.rows.length,missingChannels:m.missingChannels});
+          return send(res,200,{added:m.added,updated:m.updated,skipped:m.skipped,total:m.rows.length,missingChannels:m.missingChannels,warning:retentionWarning()});
         });
       }
       const raw=await read(req,512*1024);

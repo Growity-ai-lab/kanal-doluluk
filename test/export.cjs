@@ -3,7 +3,7 @@ const XLSX=require('../public/xlsx.full.min.js'),fflate=require('../public/fflat
 let script=fs.readFileSync(require.resolve('../public/index.html'),'utf8').match(/<script>([\s\S]*?)<\/script>/)[1];
 script=script.slice(0,script.lastIndexOf("$('loadBtn').hidden=true"));
 const el={querySelectorAll:()=>[],remove(){},addEventListener(){}};
-const ctx=vm.createContext({XLSX,fflate,document:{getElementById:()=>el},Worker:class{}});
+const ctx=vm.createContext({XLSX,fflate,document:{getElementById:()=>el,querySelectorAll:()=>[]},Worker:class{}});
 new vm.Script(fs.readFileSync(require.resolve('../public/core.js'),'utf8')).runInContext(ctx);
 new vm.Script(script).runInContext(ctx);
 ctx.inputRows=[['Atv','Gıda','Gıda','Firma','Ürün','Marka','2026-11-13','Normal Spot','Kusak Spot',64800,64830,30]];
