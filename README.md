@@ -59,6 +59,20 @@ Her veri yüklemesinden (panel veya otomatik aktarım) önce mevcut arşivin kop
 
 Admin, panelde **Ayarlar → Anlık görüntüler** bölümünden bir kopyayı geri yükleyebilir; geri yüklemeden önce mevcut hâl de kopyalanır, yani geri alma da geri alınabilir. Kural değişiklikleri görüntü almaz. Görüntüler aynı diskte durur: `render.yaml`'daki 1 GB disk, arşiv boyutunun `SNAPSHOT_KEEP + 1` katını karşılamalı. Disk bozulursa bu bir yedek değildir; Render disk anlık görüntüsünü de kullanın.
 
+## Ölçek testi
+
+`npm run scale` sentetik ADEX arşivi üretir (varsayılan günde ~3.500 satır, 15 kanal), sunucuyu bu arşivle başlatır ve bellek, açılış, yükleme süresi, olay döngüsü duraklaması ve tarayıcı tarafı hesabını ölçer. Seçenekler: `--days=90,365,730`, `--rows-per-day=N`, `--heap=384` (Render Starter'a benzetmek için sunucu heap sınırı), `--browser --browser-days=365` (gerçek Chromium ölçümü; `playwright` gerekir), `--out=sonuc.json`. `npm test`'e dahil değildir.
+
+İlk ölçüm (4 CPU / 16 GB makine, günde 3.500 satır varsayımıyla; gerçek günlük satır sayınızla tekrarlayın):
+
+| Arşiv | Satır | Sunucu boşta RSS | 1 günlük otomatik aktarım | Aktarımda tepe bellek | Tarayıcıya inen durum |
+|---|---|---|---|---|---|
+| 90 gün | 315 bin | 304 MB | 1,4 sn | 560 MB (7 gün) / 1 GB (31 gün) | 39 MB (5,5 MB gzip) |
+| 365 gün | 1,28 milyon | 965 MB | 5,6 sn | 1,7 GB | 158 MB (22 MB gzip) |
+| 730 gün | 2,55 milyon | 1,8 GB | 13 sn (7 gün) | 2,6–2,9 GB | 316 MB (45 MB gzip) |
+
+Aktarım sırasında sunucu tek iş parçacığında çalıştığı için tüm istekler aktarım süresince bekler. `--heap=384` ile 90 günlük arşivde aylık dosya yüklemesi, 180 günlük arşivde ilk günlük aktarım sunucuyu çökertir.
+
 ## Yerel çalıştırma
 
 Node.js 24 ile üç gizli değeri işletim sisteminin ortam değişkenlerinden tanımla; sonra `npm ci` ve `npm start` çalıştır. Yerel adres `http://localhost:3000`, arşiv klasörü varsayılan olarak `data/` olur. Yerel sunucuya internetten erişim açma.
