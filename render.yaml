@@ -1,9 +1,13 @@
+# Render Blueprint: uygulamanin tamami tek bir web servisi + kalici diskten ibarettir.
+# Baska bir barindirma, veritabani veya depolama (Vercel, Supabase vb.) gerekmez.
 services:
   - type: web
     name: kanal-doluluk-time
     runtime: node
     region: frankfurt
-    plan: starter
+    plan: pro
+    numInstances: 1        # kalici diskli servis tek ornek olmali; arsiv bellekte tutulur
+    autoDeploy: true       # baglanan daldaki her push yeniden dagitir
     buildCommand: npm ci --omit=dev
     startCommand: npm start
     healthCheckPath: /healthz
@@ -12,9 +16,17 @@ services:
       mountPath: /var/data
       sizeGB: 1
     envVars:
+      - key: NODE_VERSION
+        value: "24"
+      - key: NODE_OPTIONS  # Pro: 4 GB RAM; V8 heap sinirini acikca belirle (README: Olcek testi)
+        value: --max-old-space-size=3072
       - key: DATA_DIR
         value: /var/data
-      - key: ADMIN_PASSWORD
+      - key: RETENTION_DAYS  # arsivde tutulacak gun sayisi; asilinca yoneticiye temizlik uyarisi cikar
+        value: "183"
+      - key: SNAPSHOT_KEEP   # her yuklemeden once alinan anlik goruntulerden saklanacak adet
+        value: "14"
+      - key: ADMIN_PASSWORD  # acil durum yonetici hesabi (kullanici adi: admin); en az 20 karakter
         sync: false
-      - key: INGEST_TOKEN
+      - key: INGEST_TOKEN    # Windows otomatik aktarimi icin; ADMIN_PASSWORD'den farkli, en az 20 karakter
         sync: false

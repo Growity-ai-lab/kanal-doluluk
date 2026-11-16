@@ -2,13 +2,28 @@
 
 Mevcut web panelinin ortak arşivli sürümü. Filtreler, kanal/reklamveren/marka/ana sektör analizleri, grafikler, ısı haritası ve Excel çıktısı kaynak web sürümünden gelir. Windows masaüstü arayüzünün birebir kopyası değildir.
 
-## GitHub ve Render
+## Kurulum (yalnızca Render)
 
-1. ZIP'i aç. GitHub'da boş bir **Private** repo oluştur. ZIP'in içindeki dosya ve klasörleri repo köküne yükle; `render.yaml` kökte olmalı. `.gitignore` dosyasını da ekle. Kurulum EXE'sini, ADEX verisini veya şifrelerini repoya yükleme.
-2. Render Dashboard'da **New → Blueprint** seç, GitHub reposunu bağla ve ana dalı seç. Blueprint bir **Starter** Web Service ve 1 GB kalıcı disk kurar. Uygulamadan önce ekrandaki güncel bedeli kontrol et.
-3. Render istediğinde iki farklı, rastgele, en az 20 karakterli değer gir: `ADMIN_PASSWORD` (acil durum yönetici hesabı) ve `INGEST_TOKEN` (otomatik aktarım). Eski kurulumdaki `TEAM_PASSWORD` artık kullanılmaz; Render'dan silebilirsin. Anahtarları repoya yazma. Render dağıtımından sonra servisin HTTPS adresini aç.
-4. Giriş sayfasından kullanıcı adı **admin** ve `ADMIN_PASSWORD` ile gir. Bu acil durum hesabıdır; hemen **Kullanıcılar** ekranından her kişi için ayrı hesap aç (yönetici veya ekip rolü) ve günlük kullanımı kişi hesaplarına bırak. Yönetici veri yükler, kuralları, kullanıcıları ve denetim kaydını yönetir; ekip filtreler ve Excel çıktısı alır.
-5. Önce yetkili bir ADEX dışa aktarımıyla paneli dene. Eski masaüstü veritabanı kendiliğinden taşınmaz; geçmişi yüklemek için ADEX kaynak Excel'lerini kullan. Aynı aralığı masaüstü ve webde açıp kanal, spot kapsamı ve doluluk sonuçlarını karşılaştır. Arayüz ve hesap kodu eldeki web sürümüne dayanır; Windows hesaplarıyla birebir sonuç doğrulanmamıştır.
+Uygulamanın tamamı Render'da çalışır: tek bir Node web servisi ve kalıcı disk. Arşiv, anlık görüntüler, kullanıcılar ve denetim kaydı bu diskte (`/var/data`) durur. Başka bir barındırma, veritabanı veya depolama (Vercel, Supabase, GitHub Pages) gerekmez.
+
+1. **Depo:** Kod bu GitHub deposundadır (Private). Render'ın dağıtacağı dal, uygulamanın bu sürümünü içermelidir. ADEX dosyalarını, şifreleri ve anahtarları depoya koyma; `.gitignore` `*.xlsx` ve `.env`'i dışlar.
+2. **Blueprint:** Render Dashboard → **New → Blueprint** → bu depoyu bağla ve dalı seç. `render.yaml` şunları kurar: Node 24, **Pro** plan web servisi, 1 GB kalıcı disk, sağlık kontrolü (`/healthz`) ve ayarlar (`NODE_OPTIONS`, `RETENTION_DAYS`, `SNAPSHOT_KEEP`). Mevcut bir servisi bağlıyorsan planın ve ortam değişkenlerinin Blueprint ile eşleştiğini kontrol et. Ekrandaki güncel bedeli onaylamadan önce oku.
+3. **Gizli değerler:** Render sorduğunda iki farklı, rastgele, en az 20 karakterli değer gir: `ADMIN_PASSWORD` (acil durum yönetici hesabı) ve `INGEST_TOKEN` (Windows otomatik aktarımı). Bunları depoya yazma; yalnızca Render'da dururlar.
+4. **İlk giriş:** Dağıtım bitince `https://<servis-adı>.onrender.com/login` adresini aç. Kullanıcı adı **admin**, şifre `ADMIN_PASSWORD`. Hemen **Kullanıcılar** ekranından her kişi için ayrı hesap aç ve günlük kullanımı onlara bırak.
+5. **Ayarlar:** Ayarlar ekranındaki *Beklenen kanallar* alanını doldur (örnek yazı alanın içindedir).
+6. **İlk veri:** Yetkili bir ADEX dışa aktarımını **Veri yükle** ile yükle; geçmişi yüklemek için ADEX kaynak Excel'lerini kullan (en fazla `RETENTION_DAYS` günlük). Eski sistemin verisi kendiliğinden taşınmaz. Aynı aralığı masaüstü ve webde açıp kanal, spot kapsamı ve doluluk sonuçlarını karşılaştır.
+7. **Otomatik aktarım:** Aşağıdaki Windows bölümüne bak. Özel alan adı kullanırsan `windows/Render-Gonder.ps1` yalnızca `*.onrender.com` adreslerini kabul ettiği için betikteki adres denetimini bilinçli olarak güncelle.
+
+Dağıtımlar: Bağlı daldaki her push servisi yeniden kurar (`autoDeploy`). Kalıcı diskli servislerde dağıtım sırasında kısa bir kesinti olur; oturumlar ve veri korunur. Dağıtım sırasında bir otomatik aktarım denemesi düşerse betik hatayı loglar ve sonraki çalıştırmada yeniden dener.
+
+## Eski sistemi kapatma (Vercel, Supabase, GitHub Pages)
+
+Eski sürüm (React/Vite) Vercel'de, verisi Supabase'te çalışıyordu. Yeni sürüm bunlardan hiçbirini kullanmaz. Bu adımları depo dışında, ilgili hizmetlerde yap:
+
+1. **Vercel:** vercel.com → ilgili proje → *Settings → Git → Disconnect* (bağlı kaldığı sürece her push için başarısız bir derleme denemesi yapar), sonra *Settings → Environment Variables*'taki `VITE_SUPABASE_*` değerlerini sil ve projeyi sil. Özel alan adı varsa DNS kaydını Render'a çevir veya kaldır.
+2. **Supabase:** Önce `kanal-doluluk` bucket'ındaki Excel dosyalarını indirip yedekle; bunlar yeni sisteme ADEX kaynak dosyası olarak yüklenebilir. Eski bucket **herkese açık (public)** kurulmuştu; yedekten sonra bucket'ı sil veya projeyi sil, `anon` ve `service_role` anahtarlarını yenile.
+3. **GitHub:** *Settings → Pages* ve *Secrets and variables → Actions* altındaki eski değerleri (`VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY` vb.) sil. *Settings → Integrations*'ta Vercel uygulamasının bu depoya erişimini kaldır.
+4. **`main` dalı:** Eski sistem hâlâ `main` dalındadır (Vercel belgeleri, `deploy.yml`, `SupabaseService.js`). Yeni sürüm `main`'e alınınca bunlar depodan kalkar. Render'ın Blueprint'i varsayılan olarak `main`'i dağıtır; yeni sürüm `main`'e alınmadan Blueprint'i `main` ile kurma.
 
 ## ADEX dosya biçimi (gerçek bir 10 Kasım dosyasıyla doğrulandı)
 
@@ -99,7 +114,7 @@ Arşiv kendiliğinden silinmez; temizlik her zaman yöneticinin onayıyla yapıl
 
 Tarayıcı tarafı değişmedi: 1 yıllık arşivde tarayıcı yaklaşık 1,5 GB bellek kullanır ve her açılışta 22 MB iner.
 
-**Render planı:** 3 yıla kadar geçmiş 4 GB'lık Pro planında bellekte tutulabilir. Node'un heap sınırını açıkça belirleyin: Render'da `NODE_OPTIONS=--max-old-space-size=3072` ortam değişkenini tanımlayın (bu repodaki `render.yaml` hâlâ `starter` planı içerir; Pro'da çalışan servisinizin ayarını panelden yapın). 512 MB'lık Starter'da 90 günden uzun geçmiş sunucuyu çökertebilir (`--heap=384` ile ölçüldü).
+**Render planı:** `render.yaml` **Pro** plan (4 GB RAM) ve `NODE_OPTIONS=--max-old-space-size=3072` ile gelir. Bu planda 3 yıla kadar geçmiş bellekte tutulabilir; 6 aylık varsayılan saklama süresiyle rahat bir marj kalır. 512 MB'lık Starter'da 90 günden uzun geçmiş sunucuyu çökertebilir (`--heap=384` ile ölçüldü).
 
 ## Yerel çalıştırma
 
