@@ -16,6 +16,23 @@ Uygulamanın tamamı Render'da çalışır: tek bir Node web servisi ve kalıcı
 
 Dağıtımlar: Bağlı daldaki her push servisi yeniden kurar (`autoDeploy`). Kalıcı diskli servislerde dağıtım sırasında kısa bir kesinti olur; oturumlar ve veri korunur. Dağıtım sırasında bir otomatik aktarım denemesi düşerse betik hatayı loglar ve sonraki çalıştırmada yeniden dener.
 
+## Dağıtım sonrası doğrulama
+
+Servis ayağa kalktıktan sonra, canlı adrese karşı veriyi değiştirmeyen bir kontrol çalıştırabilirsin (kendi bilgisayarında, depoyu klonlayıp; yalnızca Node gerekir):
+
+```bash
+node test/verify-deploy.cjs https://<servis-adı>.onrender.com
+```
+
+Giriş yapmış kullanıcı ve aktarım anahtarı kontrolleri için şifreleri komut satırına değil ortam değişkenine yaz (betik hiçbirini ekrana basmaz). PowerShell:
+
+```powershell
+$env:VERIFY_USER='admin'; $env:VERIFY_PASSWORD='<ADMIN_PASSWORD>'; $env:VERIFY_INGEST_TOKEN='<INGEST_TOKEN>'
+node test/verify-deploy.cjs https://<servis-adı>.onrender.com
+```
+
+Betik; sağlık kontrolünü, HTTPS/HSTS ve güvenlik başlıklarını (CSP dahil), oturumsuz erişimin kapalı olduğunu, çerez bayraklarını (`Secure`, `HttpOnly`, `SameSite=Strict`), aktarım anahtarının doğru tanımlandığını (boş dosyayla, veri yazmadan) ve yönetici uçlarını denetler. Diskin kalıcılığı betikle sınanamaz: bir kullanıcı ekleyip Render'dan *Manual Deploy → Restart* yaptıktan sonra hesabın durduğunu kontrol et.
+
 ## Eski sistemi kapatma (Vercel, Supabase, GitHub Pages)
 
 Eski sürüm (React/Vite) Vercel'de, verisi Supabase'te çalışıyordu. Yeni sürüm bunlardan hiçbirini kullanmaz. Bu adımları depo dışında, ilgili hizmetlerde yap:
