@@ -77,7 +77,7 @@ const post=(p,auth,body,header=true)=>req(p,auth,{method:'POST',body,headers:hea
  assert.equal((await post('/api/users',admin,JSON.stringify({op:'create',username:'ali.veli',password:VIEWER_PASS,role:'admin'}),false)).status,403);
  assert.equal((await req('/',viewer)).status,200);
  assert.equal((await req('/worker.js',viewer)).status,200);
- assert.deepEqual(await (await req('/api/session',viewer)).json(),{admin:false,username:'ayse.yilmaz',role:'viewer',breakGlass:false,retentionDays:30});
+ assert.deepEqual(await (await req('/api/session',viewer)).json(),{admin:false,superadmin:false,username:'ayse.yilmaz',role:'viewer',breakGlass:false,retentionDays:30});
  assert.equal((await (await req('/api/session',admin)).json()).admin,true);
  const one=book(['2026-11-12'],30);
  assert.equal((await post('/api/import',viewer,one)).status,403);
@@ -247,6 +247,65 @@ const post=(p,auth,body,header=true)=>req(p,auth,{method:'POST',body,headers:hea
  assert.equal((await (await req('/api/state',viewer)).json()).rows.length,afterRestart.rows.length);
  const afterPruneImport=await (await post(append,admin,book(['2026-12-21'],30))).json();
  assert.equal(afterPruneImport.warning,'Arsivde 40 gunluk kayit var (2026-11-12 - 2026-12-21); saklama siniri 30 gun. Eski kayitlari panelden temizleyin.');
+
+ // Roller: Ekip < Yonetici < Super-yonetici
+ const RP='rol-test-parola-123';
+ const mkAs=(c,o)=>post('/api/users',c,JSON.stringify(o));
+ for(const [u,role] of [['ekip.bir','viewer'],['yonetici.bir','admin'],['super.bir','superadmin']]) assert.equal((await mkAs(admin,{op:'create',username:u,password:RP,role})).status,200);
+ assert.equal((await mkAs(admin,{op:'create',username:'bozuk.rol',password:RP,role:'patron'})).status,400);
+ // E-posta bicimli kullanici adi: gecerli olan kabul edilir, bozuk bicimler ve buyuk harf reddedilir; giris buyuk/kucuk harfe duyarsizdir
+ for(const bad of ['a@b','bos bosluk@x.com','@x.com','x@@y.com','x@y..com','Buyuk.Harf@x.com','x@y.com.','admin@x.com@z.com']) assert.equal((await mkAs(admin,{op:'create',username:bad,password:RP,role:'viewer'})).status,400,'kabul edilmemeli: '+bad);
+ assert.equal((await mkAs(admin,{op:'create',username:'test.kisi@example.com',password:RP,role:'superadmin'})).status,200);
+ const mailSes=await login('Test.Kisi@Example.com',RP);assert.equal(mailSes.status,200);
+ const mailJson=await (await req('/api/session',cookieOf(mailSes))).json();
+ assert.deepEqual([mailJson.username,mailJson.role,mailJson.superadmin],['test.kisi@example.com','superadmin',true]);
+ const ekip=cookieOf(await login('ekip.bir',RP)),yon=cookieOf(await login('yonetici.bir',RP)),sup=cookieOf(await login('super.bir',RP));
+ const sess=async c=>{const j=await (await req('/api/session',c)).json();return [j.role,j.admin,j.superadmin];};
+ assert.deepEqual(await sess(ekip),['viewer',false,false]);
+ assert.deepEqual(await sess(yon),['admin',true,false]);
+ assert.deepEqual(await sess(sup),['superadmin',true,true]);
+ assert.deepEqual(await sess(admin),['superadmin',true,true]); // acil durum hesabi super-yoneticidir
+ const rulesBody=JSON.stringify({rules:{'Normal Spot|Kusak Spot':'include'},expectedChannels:[]});
+ // Ekip: gorur ve Excel alir; veriyi ve ayarlari degistiremez, kullanici/denetim goremez
+ assert.equal((await req('/api/state',ekip)).status,200);
+ assert.equal((await post('/api/audit/export',ekip,JSON.stringify({view:'channel',start:'2026-11-12',end:'2026-11-12'}))).status,200);
+ assert.equal((await post(append,ekip,book(['2027-01-04'],30))).status,403);
+ for(const [m,u] of [['GET','/api/snapshots'],['GET','/api/users'],['GET','/api/audit']]) assert.equal((await req(u,ekip)).status,403,'ekip '+u);
+ for(const u of ['/api/prune?keep=30&dry=1','/api/rules','/api/restore?name=x']) assert.equal((await post(u,ekip,u==='/api/rules'?rulesBody:'{}')).status,403,'ekip '+u);
+ // Yonetici: Excel yukler, siler (temizlik, geri yukleme), kural ve anlik goruntuleri yonetir; kullanici ve denetim yok
+ let yr=await post(append,yon,book(['2027-01-05'],30));assert.equal(yr.status,200,await yr.clone().text());
+ assert.equal((await post('/api/prune?keep=30&dry=1',yon,'{}')).status,200);
+ assert.equal((await post('/api/rules',yon,rulesBody)).status,200);
+ assert.equal((await req('/api/snapshots',yon)).status,200);
+ assert.equal((await post('/api/restore?name=20200101T000000000Z-prune.json.gz',yon,'{}')).status,404); // yetkili ama kayit yok
+ assert.equal((await req('/api/users',yon)).status,403);
+ assert.equal((await req('/api/audit',yon)).status,403);
+ for(const o of [{op:'create',username:'yetkisiz.kisi',password:RP,role:'viewer'},{op:'delete',username:'ekip.bir'},{op:'role',username:'ekip.bir',role:'superadmin'},{op:'reset',username:'ekip.bir',password:RP+'x'}]) assert.equal((await mkAs(yon,o)).status,403,'yonetici '+o.op);
+ assert.equal((await login('yetkisiz.kisi',RP)).status,401);
+ // Super-yonetici: kullanici ekler/siler; veri islemleri de yapar
+ assert.equal((await req('/api/users',sup)).status,200);
+ assert.equal((await req('/api/audit?limit=5',sup)).status,200);
+ assert.equal((await post(append,sup,book(['2027-01-06'],30))).status,200);
+ assert.equal((await mkAs(sup,{op:'create',username:'silinecek.kisi',password:RP,role:'admin'})).status,200);
+ const silinecek=cookieOf(await login('silinecek.kisi',RP));
+ assert.equal((await req('/api/state',silinecek)).status,200);
+ assert.equal((await mkAs(sup,{op:'delete',username:'super.bir'})).status,400); // kendini silemez
+ assert.equal((await mkAs(sup,{op:'delete',username:'yok.kisi'})).status,404);
+ const del=await mkAs(sup,{op:'delete',username:'silinecek.kisi'});
+ assert.equal(del.status,200);assert.ok(!(await del.json()).users.some(u=>u.username==='silinecek.kisi'));
+ assert.equal((await req('/api/state',silinecek)).status,401); // acik oturum hemen duser
+ assert.equal((await login('silinecek.kisi',RP)).status,401);
+ // ayni ad yeniden acilirsa eski cerez gecersiz kalir
+ assert.equal((await mkAs(sup,{op:'create',username:'silinecek.kisi',password:RP,role:'viewer'})).status,200);
+ assert.equal((await req('/api/state',silinecek)).status,401);
+ assert.equal((await mkAs(sup,{op:'role',username:'yonetici.bir',role:'superadmin'})).status,200);
+ assert.equal((await req('/api/users',yon)).status,200); // rol yukselince oturum yeni yetkiyi alir
+ assert.equal((await mkAs(sup,{op:'role',username:'yonetici.bir',role:'admin'})).status,200);
+ assert.equal((await req('/api/users',yon)).status,403);
+ const roleAudit=(await (await req('/api/audit?limit=500',sup)).json()).entries;
+ assert.ok(roleAudit.some(e=>e.event==='user-delete'&&e.user==='super.bir'&&e.detail.target==='silinecek.kisi'));
+ assert.ok(roleAudit.some(e=>e.event==='denied'&&e.user==='yonetici.bir'));
+ assert.ok(roleAudit.some(e=>e.event==='denied'&&e.user==='ekip.bir'));
  if(process.env.TEST_ADEX_XLSX){
    const sample=await post('/api/import',admin,fs.readFileSync(process.env.TEST_ADEX_XLSX));
    assert.equal(sample.status,200,await sample.clone().text());

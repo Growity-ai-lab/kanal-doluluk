@@ -13,7 +13,7 @@ if (secrets.some(s => !s || s.length < 20) || new Set(secrets).size !== 2)
   throw Error('ADMIN_PASSWORD ve INGEST_TOKEN farkli ve en az 20 karakter olmali.');
 const dir = path.resolve(env.DATA_DIR || './data');
 fs.mkdirSync(dir,{recursive:true});
-const { createAuth } = require('./lib/auth.cjs');
+const { createAuth, RANK } = require('./lib/auth.cjs');
 const auth = createAuth({dir,adminPassword:secrets[0],maxFails:Number(env.LOGIN_MAX_FAILS)||8});
 const stateFile = path.join(dir,'archive.json.gz');
 const worker = new vm.Script(fs.readFileSync(path.join(root,'worker.js'),'utf8'));
@@ -197,14 +197,15 @@ http.createServer(async(req,res)=>{
     }
     const who=machine?{username:'ingest',role:'machine'}:me;
     const ctx={user:who.username,role:who.role,ip};
-    const isAdmin=!machine&&me.role==='admin';
-    const needAdmin=()=>{ if(!isAdmin) {auth.audit('denied',ctx,{route,method});throw bad('Yonetici yetkisi gerekli.',403);} };
+    // Ekip (0) goruntuler ve Excel alir; Yonetici (1) veri yukler/siler, kural ve anlik goruntuleri yonetir; Super-yonetici (2) ayrica kullanicilari ve denetim kaydini yonetir.
+    const rank=machine?-1:(RANK[me.role]??0), isAdmin=rank>=1, isSuper=rank>=2;
+    const need=min=>{ if(rank<min) {auth.audit('denied',ctx,{route,method});throw bad(min>=2?'Super yonetici yetkisi gerekli.':'Yonetici yetkisi gerekli.',403);} };
     if(method==='GET'&&Object.hasOwn(assets,route)&&me) {
       const name=assets[route];
       res.writeHead(200,{'Content-Type':mime(name)});
       return res.end(fs.readFileSync(path.join(root,name)));
     }
-    if(route==='/api/session'&&method==='GET'&&me) return send(res,200,{admin:isAdmin,username:me.username,role:me.role,breakGlass:me.breakGlass,retentionDays});
+    if(route==='/api/session'&&method==='GET'&&me) return send(res,200,{admin:isAdmin,superadmin:isSuper,username:me.username,role:me.role,breakGlass:me.breakGlass,retentionDays});
     if(route==='/api/logout'&&method==='POST'&&me) {
       panel(req);
       auth.audit('logout',ctx);
@@ -219,16 +220,16 @@ http.createServer(async(req,res)=>{
       res.setHeader('Set-Cookie',cookieHeader(req,r.cookie,43200));
       return send(res,200,{ok:true});
     }
-    if(route==='/api/users'&&method==='GET') {needAdmin(); return send(res,200,{users:auth.listUsers()});}
+    if(route==='/api/users'&&method==='GET') {need(2); return send(res,200,{users:auth.listUsers()});}
     if(route==='/api/users'&&method==='POST') {
-      needAdmin(); panel(req);
+      need(2); panel(req);
       const input=await json(req,2048);
       const r=await auth.manage(me,input);
       auth.audit(r.event,ctx,r.detail);
       return send(res,200,{users:auth.listUsers()});
     }
     if(route==='/api/audit'&&method==='GET') {
-      needAdmin();
+      need(2);
       const limit=Math.min(500,Math.max(1,Number(url.searchParams.get('limit'))||200));
       const event=/^[a-z-]{0,40}$/.test(url.searchParams.get('event')||'')?url.searchParams.get('event')||'':'';
       return send(res,200,{entries:auth.readAudit(limit,event)});
@@ -241,7 +242,7 @@ http.createServer(async(req,res)=>{
       return send(res,200,{ok:true});
     }
     if(route==='/api/snapshots'&&method==='GET') {
-      needAdmin();
+      need(1);
       return send(res,200,{keep:snapKeep,snapshots:listSnapshots()});
     }
     if(route==='/api/state'&&method==='GET'&&me) {
@@ -249,7 +250,7 @@ http.createServer(async(req,res)=>{
       return res.end(snapshot);
     }
     if(method==='POST'&&['/api/import','/api/rules','/api/restore','/api/prune'].includes(route)) {
-      if(!machine) {needAdmin(); panel(req);}
+      if(!machine) {need(1); panel(req);}
       if(route==='/api/prune') {
         const keep=Number(url.searchParams.get('keep')||retentionDays), dry=url.searchParams.get('dry')==='1';
         if(!Number.isInteger(keep)||keep<7||keep>1100) throw bad('Gecersiz saklama suresi.');
