@@ -1,0 +1,8 @@
+SheetJS Community Edition -- https://sheetjs.com/
+Copyright (C) 2012-present SheetJS LLC
+Apache License, Version 2.0. See SheetJS-Apache-2.0.txt.
+The vendored bundle is unchanged.
+
+fflate -- https://github.com/101arrowz/fflate
+Copyright (c) Arjun Barrett (101arrowz) and contributors
+MIT License. See fflate-MIT.txt.

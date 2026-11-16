@@ -1,0 +1,16 @@
+const vm=require('node:vm'),fs=require('node:fs'),assert=require('node:assert/strict');
+const XLSX=require('../public/xlsx.full.min.js'),fflate=require('../public/fflate.js');
+let script=fs.readFileSync(require.resolve('../public/index.html'),'utf8').match(/<script>([\s\S]*?)<\/script>/)[1];
+script=script.slice(0,script.lastIndexOf("$('loadBtn').hidden=true"));
+const el={querySelectorAll:()=>[],remove(){},addEventListener(){}};
+const ctx=vm.createContext({XLSX,fflate,document:{getElementById:()=>el},Worker:class{}});
+new vm.Script(fs.readFileSync(require.resolve('../public/core.js'),'utf8')).runInContext(ctx);
+new vm.Script(script).runInContext(ctx);
+ctx.inputRows=[['Atv','Gıda','Gıda','Firma','Ürün','Marka','2026-11-13','Normal Spot','Kusak Spot',64800,64830,30]];
+const result=new vm.Script(`(()=>{const f={start:'2026-11-13',end:'2026-11-13',granularity:'day',group:'',channel:'',sector:'',firm:'',brand:'',view:'channel',hourStart:7,bands:['OPT','Erken PT','PT','Geç PT']};const v=analyze(inputRows,f,['Atv|2026-11-13'],DEFAULT_RULES);return {bytes:buildExport({...v,f}),seconds:v.included};})()`).runInContext(ctx);
+assert.equal(result.seconds,30);
+const z=fflate.unzipSync(result.bytes);
+assert.ok(z['xl/charts/chart1.xml']);
+assert.ok(z['xl/charts/chart2.xml']);
+assert.ok(XLSX.read(result.bytes,{type:'array'}).SheetNames.length>=5);
+console.log('OK: calculation and Excel workbook with both charts.');
