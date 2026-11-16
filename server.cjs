@@ -6,11 +6,13 @@ const { timingSafeEqual, randomUUID } = require('node:crypto');
 const { gzipSync, gunzipSync } = require('node:zlib');
 const root = path.join(__dirname,'public');
 const env = process.env;
-const secrets = [env.ADMIN_PASSWORD, env.TEAM_PASSWORD, env.INGEST_TOKEN];
-if (secrets.some(s => !s || s.length < 20) || new Set(secrets).size !== 3)
-  throw Error('ADMIN_PASSWORD, TEAM_PASSWORD ve INGEST_TOKEN farkli ve en az 20 karakter olmali.');
+const secrets = [env.ADMIN_PASSWORD, env.INGEST_TOKEN];
+if (secrets.some(s => !s || s.length < 20) || new Set(secrets).size !== 2)
+  throw Error('ADMIN_PASSWORD ve INGEST_TOKEN farkli ve en az 20 karakter olmali.');
 const dir = path.resolve(env.DATA_DIR || './data');
 fs.mkdirSync(dir,{recursive:true});
+const { createAuth } = require('./lib/auth.cjs');
+const auth = createAuth({dir,adminPassword:secrets[0],maxFails:Number(env.LOGIN_MAX_FAILS)||8});
 const stateFile = path.join(dir,'archive.json.gz');
 const worker = new vm.Script(fs.readFileSync(path.join(root,'worker.js'),'utf8'));
 const XLSX = require('./public/xlsx.full.min.js');
@@ -62,14 +64,6 @@ function eq(a,b) {
   const x=Buffer.from(a||''),y=Buffer.from(b);
   return x.length===y.length && timingSafeEqual(x,y);
 }
-function role(req) {
-  const auth=req.headers.authorization||'';
-  if (!auth.startsWith('Basic ')) return '';
-  const value=Buffer.from(auth.slice(6),'base64').toString();
-  if (eq(value,'admin:'+secrets[0])) return 'admin';
-  if (eq(value,'time:'+secrets[1])) return 'viewer';
-  return '';
-}
 function send(res,code,data) {
   res.writeHead(code,{'Content-Type':'application/json; charset=utf-8'});
   res.end(JSON.stringify(data));
@@ -100,39 +94,106 @@ const assets={'/':'index.html','/index.html':'index.html','/worker.js':'worker.j
 function date(s) {
   return /^\d{4}-\d{2}-\d{2}$/.test(s) && Number.isFinite(Date.parse(s)) && new Date(s).toISOString().slice(0,10)===s;
 }
+function clientIp(req) {
+  const f=String(req.headers['x-forwarded-for']||'').split(',').map(x=>x.trim()).filter(Boolean);
+  return f.length?f[f.length-1]:(req.socket.remoteAddress||'');
+}
+const secureCookie=req=>env.COOKIE_SECURE==='1'||req.headers['x-forwarded-proto']==='https';
+const cookieHeader=(req,value,maxAge)=>'sid='+value+'; Path=/; HttpOnly; SameSite=Strict; Max-Age='+maxAge+(secureCookie(req)?'; Secure':'');
+async function json(req,max=8192) {
+  const raw=await read(req,max);
+  try {return JSON.parse(raw);} catch {throw bad('Gecersiz istek.');}
+}
+function panel(req) { if(req.headers['x-panel-request']!=='1') throw bad('Gecersiz istek.',403); }
 http.createServer(async(req,res)=>{
   res.setHeader('Cache-Control','no-store');
   res.setHeader('X-Content-Type-Options','nosniff');
   res.setHeader('X-Frame-Options','DENY');
   res.setHeader('Referrer-Policy','no-referrer');
+  if(secureCookie(req)) res.setHeader('Strict-Transport-Security','max-age=31536000');
   try {
     const url=new URL(req.url,'http://localhost');
-    const route=url.pathname, method=req.method;
+    const route=url.pathname, method=req.method, ip=clientIp(req);
     if(route==='/healthz'&&method==='GET') return send(res,200,{ok:true});
-    const access=role(req);
-    const machine=route==='/api/import'&&method==='POST'&&eq(req.headers.authorization,'Bearer '+secrets[2]);
-    if(!access&&!machine) {
-      if(route.startsWith('/api/')) return send(res,401,{error:'Yetki gerekli.'});
-      res.setHeader('WWW-Authenticate','Basic realm="TIME Kanal Doluluk", charset="UTF-8"');
-      return send(res,401,{error:'TIME ekip girisi gerekli.'});
+    const me=auth.identify(req.headers.cookie);
+    if(route==='/login'&&method==='GET') {
+      if(me) {res.writeHead(302,{Location:'/'});return res.end();}
+      res.writeHead(200,{'Content-Type':'text/html; charset=utf-8'});
+      return res.end(fs.readFileSync(path.join(root,'login.html')));
     }
-    if(method==='GET'&&Object.hasOwn(assets,route)) {
+    if(route==='/api/login'&&method==='POST') {
+      panel(req);
+      const input=await json(req,2048);
+      try {
+        const r=await auth.login(input&&input.username,input&&input.password,ip);
+        res.setHeader('Set-Cookie',cookieHeader(req,r.cookie,43200));
+        return send(res,200,{ok:true,username:r.username,role:r.role});
+      } catch(err) {
+        if(err.retryAfter) res.setHeader('Retry-After',err.retryAfter);
+        throw err;
+      }
+    }
+    const machine=route==='/api/import'&&method==='POST'&&eq(req.headers.authorization,'Bearer '+secrets[1]);
+    if(!me&&!machine) {
+      if(route.startsWith('/api/')) return send(res,401,{error:'Oturum gerekli.'});
+      if(method==='GET') {res.writeHead(302,{Location:'/login'});return res.end();}
+      return send(res,401,{error:'Oturum gerekli.'});
+    }
+    const who=machine?{username:'ingest',role:'machine'}:me;
+    const ctx={user:who.username,role:who.role,ip};
+    const isAdmin=!machine&&me.role==='admin';
+    const needAdmin=()=>{ if(!isAdmin) {auth.audit('denied',ctx,{route,method});throw bad('Yonetici yetkisi gerekli.',403);} };
+    if(method==='GET'&&Object.hasOwn(assets,route)&&me) {
       const name=assets[route];
       res.writeHead(200,{'Content-Type':name.endsWith('.html')?'text/html; charset=utf-8':'application/javascript; charset=utf-8'});
       return res.end(fs.readFileSync(path.join(root,name)));
     }
+    if(route==='/api/session'&&method==='GET'&&me) return send(res,200,{admin:isAdmin,username:me.username,role:me.role,breakGlass:me.breakGlass});
+    if(route==='/api/logout'&&method==='POST'&&me) {
+      panel(req);
+      auth.audit('logout',ctx);
+      res.setHeader('Set-Cookie',cookieHeader(req,'',0));
+      return send(res,200,{ok:true});
+    }
+    if(route==='/api/password'&&method==='POST'&&me) {
+      panel(req);
+      const input=await json(req,2048);
+      const r=await auth.changeOwnPassword(me,input.current,input.next);
+      auth.audit('password-change',ctx);
+      res.setHeader('Set-Cookie',cookieHeader(req,r.cookie,43200));
+      return send(res,200,{ok:true});
+    }
+    if(route==='/api/users'&&method==='GET') {needAdmin(); return send(res,200,{users:auth.listUsers()});}
+    if(route==='/api/users'&&method==='POST') {
+      needAdmin(); panel(req);
+      const input=await json(req,2048);
+      const r=await auth.manage(me,input);
+      auth.audit(r.event,ctx,r.detail);
+      return send(res,200,{users:auth.listUsers()});
+    }
+    if(route==='/api/audit'&&method==='GET') {
+      needAdmin();
+      const limit=Math.min(500,Math.max(1,Number(url.searchParams.get('limit'))||200));
+      const event=/^[a-z-]{0,40}$/.test(url.searchParams.get('event')||'')?url.searchParams.get('event')||'':'';
+      return send(res,200,{entries:auth.readAudit(limit,event)});
+    }
+    if(route==='/api/audit/export'&&method==='POST'&&me) {
+      panel(req);
+      const input=await json(req,2048);
+      const clip=v=>String(v==null?'':v).slice(0,40);
+      auth.audit('export',ctx,{view:clip(input.view),start:clip(input.start),end:clip(input.end),filters:clip(input.filters)});
+      return send(res,200,{ok:true});
+    }
     if(route==='/api/snapshots'&&method==='GET') {
-      if(access!=='admin') return send(res,403,{error:'Yonetici yetkisi gerekli.'});
+      needAdmin();
       return send(res,200,{keep:snapKeep,snapshots:listSnapshots()});
     }
-    if(route==='/api/session'&&method==='GET') return send(res,200,{admin:access==='admin'});
-    if(route==='/api/state'&&method==='GET') {
+    if(route==='/api/state'&&method==='GET'&&me) {
       res.writeHead(200,{'Content-Type':'application/json','Content-Encoding':'gzip'});
       return res.end(snapshot);
     }
     if(method==='POST'&&['/api/import','/api/rules','/api/restore'].includes(route)) {
-      if(!machine&&(access!=='admin'||req.headers['x-panel-request']!=='1'))
-        return send(res,403,{error:'Yonetici yetkisi gerekli.'});
+      if(!machine) {needAdmin(); panel(req);}
       if(route==='/api/restore') {
         const name=url.searchParams.get('name')||'';
         if(!snapName.test(name)||!listSnapshots().some(s=>s.name===name)) throw bad('Anlik goruntu bulunamadi.',404);
@@ -140,6 +201,7 @@ http.createServer(async(req,res)=>{
         try {restored=JSON.parse(gunzipSync(fs.readFileSync(path.join(snapDir,name))));} catch {throw bad('Anlik goruntu okunamadi.');}
         normalize(restored);
         save(restored,'restore');
+        auth.audit('restore',ctx,{snapshot:name,total:restored.rows.length});
         return send(res,200,{ok:true,total:restored.rows.length});
       }
       if(route==='/api/import') {
@@ -148,15 +210,21 @@ http.createServer(async(req,res)=>{
         if(!['append','replace'].includes(mode)||(mode==='replace'&&(!date(start)||!date(end)||end<start||Date.parse(end)-Date.parse(start)>366*86400000))) throw bad('Gecersiz yenileme araligi.');
         const body=await read(req,35*1024*1024);
         if(body.length<4||body.readUInt32LE(0)!==0x04034b50) throw bad('Gecerli bir XLSX dosyasi secin.');
-        const m=parseImport(body,{mode,start,end,requireDays:machine,expected:machine?state.expectedChannels:[],complete:!machine&&url.searchParams.get('complete')==='1'});
-        save({...state,rows:m.rows,coverage:m.coverage,verified:m.verified,updatedAt:new Date().toISOString()},machine?'import-auto':'import-'+mode);
+        let m;
+        try {m=parseImport(body,{mode,start,end,requireDays:machine,expected:machine?state.expectedChannels:[],complete:!machine&&url.searchParams.get('complete')==='1'});}
+        catch(err) {auth.audit('import-rejected',ctx,{mode,start,end,bytes:body.length,reason:String(err.message).slice(0,200)});throw err;}
+        save({...state,rows:m.rows,coverage:m.coverage,verified:m.verified,updatedAt:new Date().toISOString(),updatedBy:who.username},machine?'import-auto':'import-'+mode);
+        auth.audit('import',ctx,{mode,start,end,complete:!machine&&url.searchParams.get('complete')==='1',bytes:body.length,added:m.added,updated:m.updated,skipped:m.skipped,total:m.rows.length,missingChannels:m.missingChannels});
         return send(res,200,{added:m.added,updated:m.updated,skipped:m.skipped,total:m.rows.length,missingChannels:m.missingChannels});
       }
       const raw=await read(req,512*1024);
       let input;
       try {input=JSON.parse(raw);} catch {throw bad('Gecersiz kural verisi.');}
       if(!input||!input.rules||Array.isArray(input.rules)||typeof input.rules!=='object'||!Array.isArray(input.expectedChannels)||input.expectedChannels.length>40||input.expectedChannels.some(c=>typeof c!=='string'||!c.trim()||c.length>60)||Object.entries(input.rules).some(([k,v])=>k.length>320||!k.includes('|')||!['include','exclude','review'].includes(v))) throw bad('Gecersiz kural verisi.');
-      save({...state,rules:input.rules,expectedChannels:[...new Set(input.expectedChannels.map(c=>c.trim()))]});
+      const expectedChannels=[...new Set(input.expectedChannels.map(c=>c.trim()))];
+      const changed=[...new Set([...Object.keys(state.rules),...Object.keys(input.rules)])].filter(k=>state.rules[k]!==input.rules[k]);
+      save({...state,rules:input.rules,expectedChannels});
+      auth.audit('rules',ctx,{changed:changed.slice(0,30).map(k=>k+' -> '+(input.rules[k]||'silindi')),changedCount:changed.length,expectedChannels});
       return send(res,200,{ok:true});
     }
     send(res,404,{error:'Bulunamadi.'});

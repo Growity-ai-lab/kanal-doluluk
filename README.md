@@ -6,15 +6,24 @@ Mevcut web panelinin ortak arşivli sürümü. Filtreler, kanal/reklamveren/mark
 
 1. ZIP'i aç. GitHub'da boş bir **Private** repo oluştur. ZIP'in içindeki dosya ve klasörleri repo köküne yükle; `render.yaml` kökte olmalı. `.gitignore` dosyasını da ekle. Kurulum EXE'sini, ADEX verisini veya şifrelerini repoya yükleme.
 2. Render Dashboard'da **New → Blueprint** seç, GitHub reposunu bağla ve ana dalı seç. Blueprint bir **Starter** Web Service ve 1 GB kalıcı disk kurar. Uygulamadan önce ekrandaki güncel bedeli kontrol et.
-3. Render istediğinde üç farklı, rastgele, en az 20 karakterli değer gir: `ADMIN_PASSWORD`, `TEAM_PASSWORD`, `INGEST_TOKEN`. Anahtarları repoya yazma. Render dağıtımından sonra servisin HTTPS adresini aç.
-4. İlk girişte kullanıcı adı **admin**, şifre `ADMIN_PASSWORD`. Ekip kullanıcı adı **time**, şifre `TEAM_PASSWORD`. Admin veri yükler ve kuralları kaydeder; ekip filtreler ve Excel çıktısı alır. Hesaplar rol başına ortaktır. Rol testinde ayrı tarayıcı profili kullan; tarayıcı temel kimlik doğrulamasını oturum boyunca hatırlayabilir.
+3. Render istediğinde iki farklı, rastgele, en az 20 karakterli değer gir: `ADMIN_PASSWORD` (acil durum yönetici hesabı) ve `INGEST_TOKEN` (otomatik aktarım). Eski kurulumdaki `TEAM_PASSWORD` artık kullanılmaz; Render'dan silebilirsin. Anahtarları repoya yazma. Render dağıtımından sonra servisin HTTPS adresini aç.
+4. Giriş sayfasından kullanıcı adı **admin** ve `ADMIN_PASSWORD` ile gir. Bu acil durum hesabıdır; hemen **Kullanıcılar** ekranından her kişi için ayrı hesap aç (yönetici veya ekip rolü) ve günlük kullanımı kişi hesaplarına bırak. Yönetici veri yükler, kuralları, kullanıcıları ve denetim kaydını yönetir; ekip filtreler ve Excel çıktısı alır.
 5. Önce yetkili bir ADEX dışa aktarımıyla paneli dene. Eski masaüstü veritabanı kendiliğinden taşınmaz; geçmişi yüklemek için ADEX kaynak Excel'lerini kullan. Aynı aralığı masaüstü ve webde açıp kanal, spot kapsamı ve doluluk sonuçlarını karşılaştır. Arayüz ve hesap kodu eldeki web sürümüne dayanır; Windows hesaplarıyla birebir sonuç doğrulanmamıştır.
+
+## Kullanıcılar, oturum ve denetim kaydı
+
+- **Hesaplar:** Kişi başına kullanıcı adı ve şifre. Şifreler `scrypt` ile özetlenip `DATA_DIR/users.json` içinde tutulur (en az 12 karakter). Yönetici kullanıcı ekler, şifre sıfırlar, rol değiştirir, hesabı kapatır; herkes kendi şifresini **Şifre** düğmesinden değiştirir. Kendi rolünü veya hesabını değiştirmek engellidir.
+- **`admin` hesabı:** `ADMIN_PASSWORD` ile girilen acil durum hesabıdır; şifresi yalnızca Render ortam değişkeninden değişir. Yöneticilerin hepsi hesabını kaybederse buradan toparlanır.
+- **Oturum:** İmzalı, `HttpOnly` ve `SameSite=Strict` çerez, 12 saat. İmza anahtarı `DATA_DIR/session.key` dosyasındadır, yeniden dağıtımda oturumlar sürer. Şifre değişince veya hesap kapanınca o kişinin açık oturumları geçersiz olur. Çıkış, çerezi siler.
+- **Deneme sınırı:** Aynı kullanıcı adına `LOGIN_MAX_FAILS` (varsayılan 8) başarısız denemeden sonra, aynı IP'den bunun üç katı denemeden sonra 15 dakika giriş kilitlenir. Sayaçlar bellekte tutulur, yeniden başlatmada sıfırlanır.
+- **Denetim kaydı:** `DATA_DIR/audit.log` (JSON satırları, 5 MB'ta döner, 10 dosya). Kaydedilenler: giriş, başarısız giriş, çıkış, şifre değişikliği, kullanıcı işlemleri, veri yükleme (kim, mod, aralık, eklenen/güncellenen kayıt), reddedilen yükleme, geri yükleme, kural değişikliği, **Excel çıktısı** (kim, aralık, filtreler) ve yetkisiz deneme. Otomatik aktarım `ingest` adıyla görünür. Şifre ve anahtarlar kayda yazılmaz. Yönetici kaydı **Kullanıcılar** ekranından görür. Excel çıktısı kaydı tarayıcıdan bildirildiği için bir kullanıcı bunu atlatabilir; veriyi kaydın dışında almasını engellemez (bkz. aşağıdaki ham veri notu).
+- **Yedek:** `users.json`, `session.key` ve `audit.log` anlık görüntülere dahil değildir; Render disk anlık görüntüsü bunları da kapsar.
 
 ## Veri ve yetkiler
 
-- Ortak arşiv Render diskinin `/var/data/archive.json.gz` dosyasında tutulur; tek servis örneği kullan. Panel ve veri uç noktaları kimlik doğrulaması ister, yalnızca `/healthz` herkese açıktır.
-- Filtre ve Excel hesabı tarayıcıda yapıldığı için **giriş yapabilen ekip kullanıcılarına ADEX satırları da iletilir**. Ham veriyi görmeye yetkisi olmayan kullanıcılara ekip girişini verme. Müşteriye açık veya yalnızca özet veri sunan bir sürüm için bu paketi olduğu gibi kullanma.
-- Admin mevcut tarayıcıdaki ADEX içe aktarımını ortak arşive yapar. Bir ekip üyesi değişiklikleri sayfayı yenileyerek görür.
+- Ortak arşiv Render diskinin `/var/data/archive.json.gz` dosyasında tutulur; tek servis örneği kullan. Panel ve veri uç noktaları oturum ister; yalnızca `/healthz` ve giriş sayfası herkese açıktır. Otomatik aktarım yalnızca `/api/import` için `INGEST_TOKEN` kullanır.
+- Filtre ve Excel hesabı tarayıcıda yapıldığı için **giriş yapabilen ekip kullanıcılarına ADEX satırları da iletilir**. Ham veriyi görmeye yetkisi olmayan kimseye hesap açma. Müşteriye açık veya yalnızca özet veri sunan bir sürüm için bu paketi olduğu gibi kullanma.
+- Admin mevcut tarayıcıdaki ADEX içe aktarımını ortak arşive yapar. Bir ekip üyesi değişiklikleri sayfayı yenileyerek görür; durum satırında verinin kim tarafından yüklendiği yazar.
 - Üretim verisini yüklemeden önce ADEX verisini ajans içinde bu şekilde kullanma yetkinizi teyit edin. Arşiv yedeği için Render disk anlık görüntüsü veya admin hesabıyla `/api/state` çıktısını güvenli bir yerde saklayın.
 
 ## Uzak Windows bilgisayarından otomatik gönderim

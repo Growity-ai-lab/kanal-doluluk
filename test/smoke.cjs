@@ -6,10 +6,13 @@ const {spawn}=require('node:child_process');
 const {once}=require('node:events');
 const XLSX=require('../public/xlsx.full.min.js');
 const data=fs.mkdtempSync(path.join(os.tmpdir(),'kanal-test-'));
-const env={...process.env,PORT:'18357',DATA_DIR:data,ADMIN_PASSWORD:'test-admin-01234567890',TEAM_PASSWORD:'test-viewer-01234567890',INGEST_TOKEN:'test-ingest-01234567890',SNAPSHOT_KEEP:'3'};
-const basic=(u,p)=>'Basic '+Buffer.from(u+':'+p).toString('base64');
-const admin=basic('admin',env.ADMIN_PASSWORD),viewer=basic('time',env.TEAM_PASSWORD),bot='Bearer '+env.INGEST_TOKEN;
-const req=(p,auth,options={})=>fetch('http://localhost:18357'+p,{...options,headers:{...options.headers,...(auth?{Authorization:auth}:{})}});
+const env={...process.env,PORT:'18357',DATA_DIR:data,ADMIN_PASSWORD:'test-admin-01234567890',INGEST_TOKEN:'test-ingest-01234567890',SNAPSHOT_KEEP:'3',LOGIN_MAX_FAILS:'4'};
+let admin='',viewer='';const bot='Bearer '+env.INGEST_TOKEN;
+const authHeader=a=>!a?{}:/^(Bearer|Basic) /.test(a)?{Authorization:a}:{Cookie:a};
+const req=(p,auth,options={})=>fetch('http://localhost:18357'+p,{...options,headers:{...options.headers,...authHeader(auth)}});
+const login=(username,password,header=true)=>req('/api/login',null,{method:'POST',body:JSON.stringify({username,password}),headers:header?{'X-Panel-Request':'1'}:{}});
+const cookieOf=r=>r.headers.get('set-cookie').split(';')[0];
+const VIEWER_PASS='ayse-parola-12345';
 const headers=['MEDYA','Y.ANA SEKTÖR','Y.SEKTÖR','REKLAMIN FİRMASI','ÜRÜN TÜRÜ','MARKA','TARİH','SPOT TİPİ','SPOT TİPİ D.','BAŞLANGIÇ','BİTİŞ','SÜRE'];
 function book(dates,duration){
  const w=XLSX.utils.book_new();
@@ -26,12 +29,37 @@ async function stop(){if(proc&&proc.exitCode===null&&proc.signalCode===null){pro
 const post=(p,auth,body,header=true)=>req(p,auth,{method:'POST',body,headers:header?{'X-Panel-Request':'1'}:{}});
 (async()=>{
  await start();
- assert.equal((await req('/')).status,401);
+ const anon=await req('/',null,{redirect:'manual'});
+ assert.equal(anon.status,302);assert.equal(anon.headers.get('location'),'/login');
+ assert.equal((await req('/login')).status,200);
+ assert.equal((await req('/worker.js',null,{redirect:'manual'})).status,302);
  assert.equal((await req('/api/state')).status,401);
  assert.equal((await req('/api/state',bot)).status,401);
+ assert.equal((await req('/api/state','Basic '+Buffer.from('admin:'+env.ADMIN_PASSWORD).toString('base64'))).status,401);
+ // Giris: baslik zorunlu, hatali sifre ve bilinmeyen kullanici ayni mesaj
+ assert.equal((await login('admin',env.ADMIN_PASSWORD,false)).status,403);
+ const wrong=await login('admin','yanlis-sifre-123456789'),ghost1=await login('yok.kullanici','yanlis-sifre-123456789');
+ assert.equal(wrong.status,401);assert.equal(ghost1.status,401);
+ assert.equal((await wrong.json()).error,(await ghost1.json()).error);
+ const adminLogin=await login('admin',env.ADMIN_PASSWORD);
+ assert.equal(adminLogin.status,200);
+ const setCookie=adminLogin.headers.get('set-cookie');
+ assert.ok(/HttpOnly/.test(setCookie)&&/SameSite=Strict/.test(setCookie));
+ admin=cookieOf(adminLogin);
+ // Kisi hesaplari yalniz yonetici tarafindan olusturulur
+ const mk=(o)=>post('/api/users',admin,JSON.stringify(o));
+ assert.equal((await mk({op:'create',username:'ayse.yilmaz',password:'kisa',role:'viewer'})).status,400);
+ assert.equal((await mk({op:'create',username:'admin',password:VIEWER_PASS,role:'viewer'})).status,400);
+ assert.equal((await mk({op:'create',username:'Ayse Yilmaz',password:VIEWER_PASS,role:'viewer'})).status,400);
+ assert.equal((await mk({op:'create',username:'ayse.yilmaz',password:VIEWER_PASS,role:'viewer'})).status,200);
+ assert.equal((await mk({op:'create',username:'ayse.yilmaz',password:VIEWER_PASS,role:'viewer'})).status,409);
+ viewer=cookieOf(await login('ayse.yilmaz',VIEWER_PASS));
+ assert.equal((await post('/api/users',viewer,JSON.stringify({op:'create',username:'ali.veli',password:VIEWER_PASS,role:'admin'}))).status,403);
+ assert.equal((await req('/api/users',viewer)).status,403);
+ assert.equal((await post('/api/users',admin,JSON.stringify({op:'create',username:'ali.veli',password:VIEWER_PASS,role:'admin'}),false)).status,403);
  assert.equal((await req('/',viewer)).status,200);
  assert.equal((await req('/worker.js',viewer)).status,200);
- assert.equal((await (await req('/api/session',viewer)).json()).admin,false);
+ assert.deepEqual(await (await req('/api/session',viewer)).json(),{admin:false,username:'ayse.yilmaz',role:'viewer',breakGlass:false});
  assert.equal((await (await req('/api/session',admin)).json()).admin,true);
  const one=book(['2026-11-12'],30);
  assert.equal((await post('/api/import',viewer,one)).status,403);
@@ -58,6 +86,7 @@ const post=(p,auth,body,header=true)=>req(p,auth,{method:'POST',body,headers:hea
  response=await post(url,bot,book(weekend,45),false);
  assert.deepEqual((await response.json()).missingChannels,['Kanal D']);
  await stop();await start();
+ assert.equal((await req('/api/session',viewer)).status,200); // oturum yeniden baslatmadan sonra da gecerli
  const state=await (await req('/api/state',viewer)).json();
  assert.equal(state.rows.length,4);
  assert.deepEqual(state.rows.map(r=>r[11]),[30,45,45,45]);
@@ -90,6 +119,63 @@ const post=(p,auth,body,header=true)=>req(p,auth,{method:'POST',body,headers:hea
  const before=(await (await req('/api/snapshots',admin)).json()).snapshots[0].name;
  assert.equal((await post('/api/import?mode=bogus',admin,one)).status,400);
  assert.equal((await (await req('/api/snapshots',admin)).json()).snapshots[0].name,before);
+
+ // Kendi sifresini degistirme: eski oturum ve eski sifre gecersiz olur
+ const NEW_PASS='yeni-parola-98765';
+ assert.equal((await post('/api/password',viewer,JSON.stringify({current:'yanlis-yanlis-123',next:NEW_PASS}))).status,403);
+ assert.equal((await post('/api/password',viewer,JSON.stringify({current:VIEWER_PASS,next:'kisa'}))).status,400);
+ assert.equal((await post('/api/password',admin,JSON.stringify({current:env.ADMIN_PASSWORD,next:NEW_PASS}))).status,400);
+ const changed=await post('/api/password',viewer,JSON.stringify({current:VIEWER_PASS,next:NEW_PASS}));
+ assert.equal(changed.status,200);
+ assert.equal((await req('/api/state',viewer)).status,401);
+ const fresh=cookieOf(changed);
+ assert.equal((await req('/api/state',fresh)).status,200);
+ assert.equal((await login('ayse.yilmaz',VIEWER_PASS)).status,401);
+ viewer=cookieOf(await login('ayse.yilmaz',NEW_PASS));
+ // Hesap kapatma, rol degistirme, sifre sifirlama
+ assert.equal((await mk({op:'disable',username:'ayse.yilmaz'})).status,200);
+ assert.equal((await req('/api/state',viewer)).status,401);
+ assert.equal((await login('ayse.yilmaz',NEW_PASS)).status,401);
+ assert.equal((await mk({op:'enable',username:'ayse.yilmaz'})).status,200);
+ assert.equal((await mk({op:'reset',username:'ayse.yilmaz',password:'sifirlanan-parola-1'})).status,200);
+ assert.equal((await login('ayse.yilmaz',NEW_PASS)).status,401);
+ viewer=cookieOf(await login('ayse.yilmaz','sifirlanan-parola-1'));
+ assert.equal((await mk({op:'role',username:'ayse.yilmaz',role:'admin'})).status,200);
+ assert.equal((await (await req('/api/session',viewer)).json()).admin,true);
+ assert.equal((await mk({op:'role',username:'ayse.yilmaz',role:'viewer'})).status,200);
+ assert.equal((await mk({op:'bogus',username:'ayse.yilmaz'})).status,400);
+ assert.equal((await mk({op:'disable',username:'yok.kisi'})).status,404);
+ // Excel ciktisi denetim kaydina islenir
+ assert.equal((await post('/api/audit/export',viewer,JSON.stringify({view:'channel',start:'2026-11-12',end:'2026-11-15',filters:'channel=Atv'}))).status,200);
+ // Denetim kaydi: yalniz yonetici gorur; kimin ne yaptigi kayitlidir
+ assert.equal((await req('/api/audit',viewer)).status,403);
+ const entries=(await (await req('/api/audit?limit=500',admin)).json()).entries;
+ const has=(ev,pred=()=>true)=>entries.some(e=>e.event===ev&&pred(e));
+ assert.ok(has('login',e=>e.user==='ayse.yilmaz'&&e.role==='viewer'));
+ assert.ok(has('login',e=>e.user==='admin'&&e.detail.breakGlass));
+ assert.ok(has('login-failed'));
+ assert.ok(has('user-create',e=>e.user==='admin'&&e.detail.target==='ayse.yilmaz'));
+ assert.ok(has('user-reset-password',e=>e.detail.target==='ayse.yilmaz'));
+ assert.ok(has('password-change',e=>e.user==='ayse.yilmaz'));
+ assert.ok(has('import',e=>e.user==='admin'&&e.detail.mode==='append'&&e.detail.added>=0));
+ assert.ok(has('import',e=>e.user==='ingest'&&e.role==='machine'&&e.detail.mode==='replace'));
+ assert.ok(has('import-rejected',e=>e.user==='ingest'));
+ assert.ok(has('rules',e=>e.user==='admin'));
+ assert.ok(has('restore',e=>e.user==='admin'));
+ assert.ok(has('denied',e=>e.user==='ayse.yilmaz'));
+ assert.ok(has('export',e=>e.user==='ayse.yilmaz'&&e.detail.filters==='channel=Atv'));
+ assert.equal((await (await req('/api/audit?event=restore',admin)).json()).entries.every(e=>e.event==='restore'),true);
+ assert.ok(['admin','ingest'].includes((await (await req('/api/state',admin)).json()).updatedBy));
+ // Sifreler ne denetim kaydinda ne kullanici dosyasinda acik metin olarak bulunur
+ for(const f of ['audit.log','users.json']){
+   const text=fs.readFileSync(path.join(data,f),'utf8');
+   for(const secret of [VIEWER_PASS,NEW_PASS,'sifirlanan-parola-1',env.ADMIN_PASSWORD,env.INGEST_TOKEN]) assert.ok(!text.includes(secret),f+' icinde sifre var');
+ }
+ // Deneme siniri: ayni kullanici adina pes pese hatali giris kilitlenir; dogru yonetici girisi etkilenmez
+ for(let i=0;i<4;i++) assert.equal((await login('hedef.kisi','yanlis-sifre-123456789')).status,401);
+ const locked=await login('hedef.kisi','yanlis-sifre-123456789');
+ assert.equal(locked.status,429);assert.ok(Number(locked.headers.get('retry-after'))>0);
+ assert.equal((await login('admin',env.ADMIN_PASSWORD)).status,200);
  if(process.env.TEST_ADEX_XLSX){
    const sample=await post('/api/import',admin,fs.readFileSync(process.env.TEST_ADEX_XLSX));
    assert.equal(sample.status,200,await sample.clone().text());
