@@ -1,179 +1,126 @@
-# React + Vite
+# Kanal Doluluk Analizi · TIME
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Mevcut web panelinin ortak arşivli sürümü. Filtreler, kanal/reklamveren/marka/ana sektör analizleri, grafikler, ısı haritası ve Excel çıktısı kaynak web sürümünden gelir. Windows masaüstü arayüzünün birebir kopyası değildir.
 
-Currently, two official plugins are available:
+## Kurulum (yalnızca Render)
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+Uygulamanın tamamı Render'da çalışır: tek bir Node web servisi ve kalıcı disk. Arşiv, anlık görüntüler, kullanıcılar ve denetim kaydı bu diskte (`/var/data`) durur. Başka bir barındırma, veritabanı veya depolama (Vercel, Supabase, GitHub Pages) gerekmez.
 
-## React Compiler
+1. **Depo:** Kod bu GitHub deposundadır (Private). Render'ın dağıtacağı dal, uygulamanın bu sürümünü içermelidir. ADEX dosyalarını, şifreleri ve anahtarları depoya koyma; `.gitignore` `*.xlsx` ve `.env`'i dışlar.
+2. **Blueprint:** Render Dashboard → **New → Blueprint** → bu depoyu bağla ve dalı seç. `render.yaml` şunları kurar: Node 24, **Pro** plan web servisi, 1 GB kalıcı disk, sağlık kontrolü (`/healthz`) ve ayarlar (`NODE_OPTIONS`, `RETENTION_DAYS`, `SNAPSHOT_KEEP`). Mevcut bir servisi bağlıyorsan planın ve ortam değişkenlerinin Blueprint ile eşleştiğini kontrol et. Ekrandaki güncel bedeli onaylamadan önce oku.
+3. **Gizli değerler:** Render sorduğunda iki farklı, rastgele, en az 20 karakterli değer gir: `ADMIN_PASSWORD` (acil durum yönetici hesabı) ve `INGEST_TOKEN` (Windows otomatik aktarımı). Bunları depoya yazma; yalnızca Render'da dururlar.
+4. **İlk giriş:** Dağıtım bitince `https://<servis-adı>.onrender.com/login` adresini aç. Kullanıcı adı **admin**, şifre `ADMIN_PASSWORD`. Hemen **Kullanıcılar** ekranından her kişi için ayrı hesap aç ve günlük kullanımı onlara bırak.
+5. **Ayarlar:** Ayarlar ekranındaki *Beklenen kanallar* alanını doldur (örnek yazı alanın içindedir).
+6. **İlk veri:** Yetkili bir ADEX dışa aktarımını **Veri yükle** ile yükle; geçmişi yüklemek için ADEX kaynak Excel'lerini kullan (en fazla `RETENTION_DAYS` günlük). Eski sistemin verisi kendiliğinden taşınmaz. Aynı aralığı masaüstü ve webde açıp kanal, spot kapsamı ve doluluk sonuçlarını karşılaştır.
+7. **Otomatik aktarım:** Aşağıdaki Windows bölümüne bak. Özel alan adı kullanırsan `windows/Render-Gonder.ps1` yalnızca `*.onrender.com` adreslerini kabul ettiği için betikteki adres denetimini bilinçli olarak güncelle.
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+Dağıtımlar: Bağlı daldaki her push servisi yeniden kurar (`autoDeploy`). Kalıcı diskli servislerde dağıtım sırasında kısa bir kesinti olur; oturumlar ve veri korunur. Dağıtım sırasında bir otomatik aktarım denemesi düşerse betik hatayı loglar ve sonraki çalıştırmada yeniden dener.
 
-# Kanal Doluluk Analizi Platformu
+## Eski sistemi kapatma (Vercel, Supabase, GitHub Pages)
 
-Merkezi Excel dosya yönetimi ve ortak veri analizi platformu.
-**6-7 kullanıcı, farklı bilgisayarlardan aynı veriyi görebilir.**
+Eski sürüm (React/Vite) Vercel'de, verisi Supabase'te çalışıyordu. Yeni sürüm bunlardan hiçbirini kullanmaz. Bu adımları depo dışında, ilgili hizmetlerde yap:
 
-## 🚀 Hızlı Başlangıç
+1. **Vercel:** vercel.com → ilgili proje → *Settings → Git → Disconnect* (bağlı kaldığı sürece her push için başarısız bir derleme denemesi yapar), sonra *Settings → Environment Variables*'taki `VITE_SUPABASE_*` değerlerini sil ve projeyi sil. Özel alan adı varsa DNS kaydını Render'a çevir veya kaldır.
+2. **Supabase:** Önce `kanal-doluluk` bucket'ındaki Excel dosyalarını indirip yedekle; bunlar yeni sisteme ADEX kaynak dosyası olarak yüklenebilir. Eski bucket **herkese açık (public)** kurulmuştu; yedekten sonra bucket'ı sil veya projeyi sil, `anon` ve `service_role` anahtarlarını yenile.
+3. **GitHub:** *Settings → Pages* ve *Secrets and variables → Actions* altındaki eski değerleri (`VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY` vb.) sil. *Settings → Integrations*'ta Vercel uygulamasının bu depoya erişimini kaldır.
+4. **`main` dalı:** Eski sistem hâlâ `main` dalındadır (Vercel belgeleri, `deploy.yml`, `SupabaseService.js`). Yeni sürüm `main`'e alınınca bunlar depodan kalkar. Render'ın Blueprint'i varsayılan olarak `main`'i dağıtır; yeni sürüm `main`'e alınmadan Blueprint'i `main` ile kurma.
 
-### Yerel Development
+## ADEX dosya biçimi (gerçek bir 10 Kasım dosyasıyla doğrulandı)
 
-```bash
-npm install
-npm run dev
+- **Başlıklar:** `MEDYA`, `Y.ANA SEKTÖR`, `Y.SEKTÖR`, `REKLAMIN FİRMASI`, `ÜRÜN TÜRÜ`, `MARKA`, `TARİH`, `SPOT TİPİ`, `SPOT TİPİ D.`, `BAŞLANGIÇ`, `BİTİŞ` zorunludur; `SÜRE` (saniye) varsa o esas alınır. `ADET`, `G.R.P…` gibi diğer sütunlar yok sayılır.
+- **Tarih** `10.11.2026` biçiminde metindir. **Saatler** günün kesri olarak gelir; yayın günü 02:00'da başlayıp 26:00'da biter ve gece yarısından sonrası 1'in üzerinde bir değerdir (örn. 25:57 → 1,0817). Ayrıştırıcı bunu doğru okur.
+- **Süre:** Bu dosyada `BİTİŞ`, spotun son saniyesini içerir; yani `BİTİŞ − BAŞLANGIÇ` her satırda `SÜRE`'den 1 sn kısadır. Hesap `SÜRE` sütununu kullanır. `SÜRE` olmayan eski dosyalarda bitiş−başlangıç kullanılır ve spot başına 1 sn eksik kalır.
+- **Kanal adları** sayı (`360`) veya virgül (`Tv8,5`) içerebilir. Ayarlardaki *Beklenen kanallar* alanı bu yüzden noktalı virgülle ayrılır.
+
+## Kullanıcılar, oturum ve denetim kaydı
+
+- **Hesaplar:** Kişi başına kullanıcı adı ve şifre. Şifreler `scrypt` ile özetlenip `DATA_DIR/users.json` içinde tutulur (en az 12 karakter). Yönetici kullanıcı ekler, şifre sıfırlar, rol değiştirir, hesabı kapatır; herkes kendi şifresini **Şifre** düğmesinden değiştirir. Kendi rolünü veya hesabını değiştirmek engellidir.
+- **`admin` hesabı:** `ADMIN_PASSWORD` ile girilen acil durum hesabıdır; şifresi yalnızca Render ortam değişkeninden değişir. Yöneticilerin hepsi hesabını kaybederse buradan toparlanır.
+- **Oturum:** İmzalı, `HttpOnly` ve `SameSite=Strict` çerez, 12 saat. İmza anahtarı `DATA_DIR/session.key` dosyasındadır, yeniden dağıtımda oturumlar sürer. Şifre değişince veya hesap kapanınca o kişinin açık oturumları geçersiz olur. Çıkış, çerezi siler.
+- **Deneme sınırı:** Aynı kullanıcı adına `LOGIN_MAX_FAILS` (varsayılan 8) başarısız denemeden sonra, aynı IP'den bunun üç katı denemeden sonra 15 dakika giriş kilitlenir. Sayaçlar bellekte tutulur, yeniden başlatmada sıfırlanır.
+- **Denetim kaydı:** `DATA_DIR/audit.log` (JSON satırları, 5 MB'ta döner, 10 dosya). Kaydedilenler: giriş, başarısız giriş, çıkış, şifre değişikliği, kullanıcı işlemleri, veri yükleme (kim, mod, aralık, eklenen/güncellenen kayıt), reddedilen yükleme, geri yükleme, kural değişikliği, **Excel çıktısı** (kim, aralık, filtreler) ve yetkisiz deneme. Otomatik aktarım `ingest` adıyla görünür. Şifre ve anahtarlar kayda yazılmaz. Yönetici kaydı **Kullanıcılar** ekranından görür. Excel çıktısı kaydı tarayıcıdan bildirildiği için bir kullanıcı bunu atlatabilir; veriyi kaydın dışında almasını engellemez (bkz. aşağıdaki ham veri notu).
+- **Yedek:** `users.json`, `session.key` ve `audit.log` anlık görüntülere dahil değildir; Render disk anlık görüntüsü bunları da kapsar.
+
+## Güvenlik başlıkları (CSP)
+
+Her yanıtta `Content-Security-Policy` gönderilir: betikler yalnızca kendi kaynağımızdan (`script-src 'self'`) çalışır, satır içi betik, `eval` ve dış kaynak yoktur; sayfa çerçeveye alınamaz, `<base>` ve eklenti içeriği kapalıdır. Yalnızca grafik çubuklarının boyutu için stil *öznitelikleri*ne izin verilir (`style-src-attr`); `<style>` blokları ve dış stil dosyaları engelli. Ek olarak `Permissions-Policy`, `Cross-Origin-Opener-Policy` ve `Cross-Origin-Resource-Policy` ayarlıdır; HTTPS arkasında `Strict-Transport-Security` de eklenir.
+
+Bu nedenle arayüz kodu `public/app.js` ve `public/app.css` dosyalarındadır. Sayfalara satır içi `<script>`, `<style>` veya `onclick=` gibi öznitelikler eklemeyin; `npm test` bunu denetler. Yeni bir dış kaynak (CDN, font, analitik) gerekirse `server.cjs` içindeki `CSP` listesini bilinçli olarak genişletin.
+
+## Veri ve yetkiler
+
+- Ortak arşiv Render diskinin `/var/data/archive.json.gz` dosyasında tutulur; tek servis örneği kullan. Panel ve veri uç noktaları oturum ister; yalnızca `/healthz` ve giriş sayfası herkese açıktır. Otomatik aktarım yalnızca `/api/import` için `INGEST_TOKEN` kullanır.
+- Filtre ve Excel hesabı tarayıcıda yapıldığı için **giriş yapabilen ekip kullanıcılarına ADEX satırları da iletilir**. Ham veriyi görmeye yetkisi olmayan kimseye hesap açma. Müşteriye açık veya yalnızca özet veri sunan bir sürüm için bu paketi olduğu gibi kullanma.
+- Admin mevcut tarayıcıdaki ADEX içe aktarımını ortak arşive yapar. Bir ekip üyesi değişiklikleri sayfayı yenileyerek görür; durum satırında verinin kim tarafından yüklendiği yazar.
+- Üretim verisini yüklemeden önce ADEX verisini ajans içinde bu şekilde kullanma yetkinizi teyit edin. Arşiv yedeği için Render disk anlık görüntüsü veya admin hesabıyla `/api/state` çıktısını güvenli bir yerde saklayın.
+
+## Uzak Windows bilgisayarından otomatik gönderim
+
+Windows'taki ADEX ve Excel otomasyonu yerinde kalır. `windows/Render-Gonder.ps1` dosyasını ADEX betiğinin yanına koy. Görevi çalıştıran Windows kullanıcısının ortam değişkenlerine `DOLULUK_RENDER_URL` (HTTPS Render adresi) ve `DOLULUK_INGEST_TOKEN` (Render'daki `INGEST_TOKEN`) değerlerini ekle. Bunlar Windows'un kullanıcı ortam değişkenleri ekranından ayarlanabilir.
+
+Güncel ADEX betiğinde başarılı aktarım logundan sonra, Excel dosyası kapanmışken ve log/kapatma akışını bozmadan şu çağrıyı ekle. Paket, uzak bilgisayardaki güncel betiği kendiliğinden değiştirmez:
+
+```powershell
+try {
+    $renderResult = & (Join-Path $PSScriptRoot 'Render-Gonder.ps1') -ExcelPath $file -StartDate $fromDay -EndDate $day
+    Log "RENDER BASARILI: $($renderResult.total) ortak kayit"
+    if ($renderResult.warning) { Log "RENDER UYARI: $($renderResult.warning)" }
+    if ($renderResult.missingChannels.Count) { Log "RENDER UYARI: dosyada eksik kanallar: $($renderResult.missingChannels -join ', ')" }
+} catch {
+    Log "RENDER HATA: $($_.Exception.Message)"
+}
 ```
 
-Tarayıcıda `http://localhost:5173` açılacak.
+Çağrı her çalıştırmada yalnızca verilen tarih aralığını yeniler ve dosyada aralık dışı veya eksik gün varsa reddeder. Geçmiş arşiv için önce panelden geriye dönük yükleme yapın. Excel yerel olarak kaydedilmişse başarısız Render aktarımı yardımcı betikle tekrar gönderilebilir.
 
-### Production Build
+## Veri kapsamı (kanal-gün bazında)
 
-```bash
-npm run build
-npm run preview
-```
+Doluluk kapasitesi yalnızca **kaydı olan kanal-günler** için hesaplanır. Her kanal-gün iki durumdan birindedir:
 
----
+- **Doğrulanmış:** Otomatik aktarımla gelen aralıktaki, dosyada bulunan her kanal için her gün; ya da admin'in yüklemede "içindeki her kanalın seçilen dönemini eksiksiz kapsıyor" seçeneğini işaretlediği kanal-günler. Gerçekten reklamsız bir gün de doğrulanırsa %0 doluluk sayılır.
+- **Doğrulanmamış:** Yalnızca kaydı olduğu için kapsamda sayılan gün. Rakam hesaplanır ama panelde uyarı çıkar ve ısı haritasında `*` ile işaretlenir.
 
-## 📊 Mimarı
+Ayarlar ekranındaki **Beklenen kanallar** listesi doldurulursa, otomatik aktarım dosyasında bu kanallardan biri hiç yoksa yanıt `missingChannels` ile uyarır ve o kanalın aralıktaki günlerinin doğrulaması kaldırılır. Bir aralık doğrulamasız yenilenirse o aralığın doğrulaması da düşer. Eski arşivlerdeki tek "kapsam doğrulandı" bayrağı ilk açılışta otomatik olarak kanal-gün doğrulamasına çevrilir.
 
-- **Frontend:** React + Vite
-- **Storage:** Supabase (merkezi Excel dosya deposu)
-- **Lokal Cache:** IndexedDB
-- **Deploy:** Vercel / Render
+## Anlık görüntüler ve geri alma
 
----
+Her veri yüklemesinden (panel veya otomatik aktarım) önce mevcut arşivin kopyası `DATA_DIR/snapshots` klasörüne alınır. Son `SNAPSHOT_KEEP` adet saklanır (varsayılan 14; ortam değişkeniyle değiştirilir). Görüntü alınamazsa yükleme yapılmaz; doğrulamada reddedilen yüklemeler görüntü oluşturmaz.
 
-## ⚙️ Supabase Kurulumu
+Admin, panelde **Ayarlar → Anlık görüntüler** bölümünden bir kopyayı geri yükleyebilir; geri yüklemeden önce mevcut hâl de kopyalanır, yani geri alma da geri alınabilir. Kural değişiklikleri görüntü almaz. Görüntüler aynı diskte durur: `render.yaml`'daki 1 GB disk, arşiv boyutunun `SNAPSHOT_KEEP + 1` katını karşılamalı. Disk bozulursa bu bir yedek değildir; Render disk anlık görüntüsünü de kullanın.
 
-### 1. Supabase Projesi Oluştur
+## Saklama süresi ve temizlik
 
-1. [supabase.com](https://supabase.com) git, **Login** yap
-2. **"New Project"** tıkla
-3. Proje adı: `kanal-doluluk`
-4. Database password ayarla
-5. Region seç (en yakın: tr-istanbul vs eu-west)
-6. **Create** tıkla (2-3 dakika bekle)
+Arşiv ham spot satırlarını **6 ay (183 gün)** tutmak üzere tasarlanmıştır; günlük ve haftalık karşılaştırmalar için bu yeterlidir. Sınır `RETENTION_DAYS` ortam değişkeniyle değişir. Arşivdeki en eski ve en yeni kayıt arası bu süreyi aşarsa:
 
-### 2. Storage Bucket
+- Yöneticiye sayfanın üstünde ve **Veri yükle** penceresinde uyarı gösterilir (yükleme yine de yapılabilir).
+- Otomatik aktarım yanıtında `warning` alanı döner; yukarıdaki PowerShell örneği bunu `RENDER UYARI` olarak loglar.
+- Uyarıdaki **Eski kayıtları temizle** düğmesi, son kayıttan geriye `RETENTION_DAYS` günden eski satırları siler. Önce kaç kaydın silineceği gösterilir ve onay istenir. Silmeden önce otomatik anlık görüntü alınır (**Ayarlar → Anlık görüntüler**'den geri yüklenir) ve işlem denetim kaydına yazılır.
 
-1. Supabase dashboard → **Storage** → **"Create a new bucket"**
-2. Bucket adı: `kanal-doluluk`
-3. **"Public bucket"** seç ✓
-4. **Create** tıkla
+Arşiv kendiliğinden silinmez; temizlik her zaman yöneticinin onayıyla yapılır. Ölçüme göre 6 ay (~640 bin satır, günde 3.500 satır varsayımıyla) sunucuda yaklaşık 0,5 GB boşta bellek ve ~1 GB aktarım tepesi demektir.
 
-### 3. API Keys
+## Ölçek testi
 
-1. **Settings** → **API** aç
-2. **"Project URL"** kopyala → `.env` dosyasına `VITE_SUPABASE_URL`
-3. **"Service Role Key"** ya da **"anon public key"** kopyala → `.env` dosyasına `VITE_SUPABASE_ANON_KEY`
+`npm run scale` sentetik ADEX arşivi üretir (varsayılan günde ~3.500 satır, 15 kanal), sunucuyu bu arşivle başlatır ve bellek, açılış, yükleme süresi, olay döngüsü duraklaması ve tarayıcı tarafı hesabını ölçer. Seçenekler: `--days=90,365,730`, `--rows-per-day=N`, `--heap=384` (Render Starter'a benzetmek için sunucu heap sınırı), `--browser --browser-days=365` (gerçek Chromium ölçümü; `playwright` gerekir), `--out=sonuc.json`. `npm test`'e dahil değildir.
 
-### 4. `.env` Dosyası Oluştur
+Ölçüm (4 CPU / 16 GB makine, günde 3.500 satır varsayımıyla; gerçek günlük satır sayınızla tekrarlayın). Sunucu belleği satır başına yaklaşık 0,75 KB'tır:
 
-Projenin root'unda `.env` dosyası oluştur:
+| Arşiv | Satır | Sunucu boşta RSS | 1 günlük otomatik aktarım (donma) | Aylık dosya yükleme (donma) | Aktarımda tepe bellek | Tarayıcıya inen durum |
+|---|---|---|---|---|---|---|
+| 365 gün | 1,28 milyon | 0,97 GB | 0,4 sn | 4,0 sn | 1,2 GB | 158 MB (22 MB gzip) |
+| 730 gün | 2,55 milyon | 1,8 GB | 0,5 sn | 4,9 sn | 2,0 GB | 316 MB (45 MB gzip) |
+| 1095 gün | 3,83 milyon | 2,7 GB | — | 4,8 sn | 3,0 GB | 474 MB (67 MB gzip) |
 
-```bash
-cp .env.example .env
-```
+"Donma", aktarım sırasında diğer isteklerin (sayfa açma, filtreleme) beklediği en uzun süredir. Aylık dosyadaki süre XLSX'in ayrıştırılmasından gelir ve arşiv boyutundan bağımsızdır. Tekrar-kontrolü yalnızca gelen dosyanın günleri için yapılır, arşiv parça parça yazılır ve durum değiştiren işlemler (yükleme, kural, geri yükleme) sırayla çalışır. Bu iyileştirmeden önce 1 yıllık arşivde günlük aktarım 5,5 sn, aylık dosya 10,7 sn donduruyordu; tepe bellek 1,7–1,9 GB idi.
 
-Sonra `.env` dosyasını açıp değerleri doldur:
+Tarayıcı tarafı değişmedi: 1 yıllık arşivde tarayıcı yaklaşık 1,5 GB bellek kullanır ve her açılışta 22 MB iner.
 
-```env
-VITE_SUPABASE_URL=https://xxxxx.supabase.co
-VITE_SUPABASE_ANON_KEY=eyJhbGc...
-```
+**Render planı:** `render.yaml` **Pro** plan (4 GB RAM) ve `NODE_OPTIONS=--max-old-space-size=3072` ile gelir. Bu planda 3 yıla kadar geçmiş bellekte tutulabilir; 6 aylık varsayılan saklama süresiyle rahat bir marj kalır. 512 MB'lık Starter'da 90 günden uzun geçmiş sunucuyu çökertebilir (`--heap=384` ile ölçüldü).
 
-### 5. İlk Excel Dosyasını Upload Et
+## Yerel çalıştırma
 
-1. Supabase → Storage → **kanal-doluluk** bucket
-2. **"Upload file"** tıkla
-3. Hazır olan Excel dosyasını seç (örn: `kanal-doluluk.xlsx`)
-4. Upload tamamlanınca, dosya listesinde görülmeli
+Node.js 24 ile üç gizli değeri işletim sisteminin ortam değişkenlerinden tanımla; sonra `npm ci` ve `npm start` çalıştır. Yerel adres `http://localhost:3000`, arşiv klasörü varsayılan olarak `data/` olur. Yerel sunucuya internetten erişim açma.
 
----
+## Geliştirme notları
 
-## 🌐 Vercel'e Deploy
-
-### 1. GitHub'a Push
-
-```bash
-git add .
-git commit -m "feat: Supabase integration for shared Excel analytics"
-git branch -M main
-git remote add origin https://github.com/your-username/kanal-doluluk.git
-git push -u origin main
-```
-
-### 2. Vercel'de Deploy
-
-1. [vercel.com](https://vercel.com) git, GitHub ile login
-2. **"New Project"** → `kanal-doluluk` repo seç
-3. **Import** tıkla
-4. Framework: **React** seç (otomatik)
-5. **Environment Variables** section'unda ekle:
-
-| Key | Value |
-|-----|-------|
-| `VITE_SUPABASE_URL` | Supabase Project URL |
-| `VITE_SUPABASE_ANON_KEY` | Supabase Public Anon Key |
-
-6. **Deploy** tıkla
-
-### 3. Public URL
-
-Deploy sonrası Vercel size URL verecek:
-```
-https://kanal-doluluk.vercel.app
-```
-
-Bu linki 6-7 kişiye gönder! 🎉
-
----
-
-## 📅 Haftalık Güncelleme
-
-Her hafta yeni Excel dosyası:
-
-1. Güncel verileri Excel'e gir
-2. `YYYY-MM-DD_kanal_doluluk.xlsx` adıyla kaydet
-3. Supabase Storage → `kanal-doluluk` → Upload
-4. Kullanıcılar uygulamada **"Veriyi Yenile"** butonuna basarlar
-5. Yeni veri herkeste otomatik senkron olur
-
----
-
-## 🔧 Geliştirme
-
-### Yeni Feature Eklemek
-
-1. El kalem kodu yazıp `npm run dev`'de test et
-2. Lint kontrol et: `npm run lint`
-3. Build kontrol et: `npm run build`
-4. Git push → Vercel otomatik redeploy
-
-### Build Boyutu Uyarısı
-
-Build'de `"chunks are larger than 500 kB"` uyarısı normaldi (PWA + xlsx lib). İhmal et.
-
----
-
-## 📝 Lisans
-
-Kanal Doluluk Analizi © 2026
-
----
-
-## 🆘 Sorunlar
-
-| Sorun | Çözüm |
-|-------|-------|
-| "Supabase connection error" | `.env` değerlerini kontrol et, Supabase dashboard'dan yeniden kopyala |
-| "Excel bulunamadı" | Supabase'te bucket'ta dosya var mı kontrol et |
-| "Vercel build hatası" | Terminal'de `npm run build` çalıştırıp hata mesajına bak |
-| "Şifreli .env push oldu" | `.gitignore` kontrol et, dosya gitignore'da mı |
-
----
-
-**Tüm adımlar tamamlandı mı? `npm run dev` komutuyla başla!**
-
+- Hesaplama çekirdeği tek dosyada: `public/core.js`. Sayfa, Web Worker ve sunucu aynı dosyayı kullanır; testler de bunu çağırır.
+- `npm test`: hesaplama birim testleri (`test/core.cjs`), sunucu/yetki/içe aktarım testi (`test/smoke.cjs`) ve Excel çıktısı (`test/export.cjs`). Node 24 gerekir (Render'da `engines` ile sabitlidir).
