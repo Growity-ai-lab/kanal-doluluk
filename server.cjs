@@ -15,6 +15,20 @@ const dir = path.resolve(env.DATA_DIR || './data');
 fs.mkdirSync(dir,{recursive:true});
 const { createAuth, RANK } = require('./lib/auth.cjs');
 const auth = createAuth({dir,adminPassword:secrets[0],maxFails:Number(env.LOGIN_MAX_FAILS)||8});
+// E-posta bildirimi (SMTP_HOST/SMTP_PORT/SMTP_USER/SMTP_PASSWORD/MAIL_FROM tanimliysa acik). Gonderim hatalari istegi bozmaz; denetim kaydina yazilir.
+const { createMailer } = require('./lib/mail.cjs');
+const mail = createMailer(env,{onError:(e,kind)=>auth.audit('mail-failed',{user:'sistem'},{kind,error:String(e.message).slice(0,200)})});
+const NOTIFY_KINDS = ['delete-request','delete-decision','import','import-auto','import-rejected'];
+const notifyOn = new Set(String(env.NOTIFY_ON||NOTIFY_KINDS.join(',')).split(',').map(x=>x.trim()).filter(k=>NOTIFY_KINDS.includes(k)));
+const extraRecipients = String(env.NOTIFY_EMAILS||'').split(/[;,\s]+/).filter(Boolean);
+const publicUrl = String(env.PUBLIC_URL||env.RENDER_EXTERNAL_URL||'').replace(/\/+$/,'');
+const supers = (exclude='') => [...auth.recipients(['superadmin'],{exclude}),...extraRecipients];
+const managers = (exclude='') => [...auth.recipients(['admin','superadmin'],{exclude}),...extraRecipients];
+function notify(kind,to,subject,lines) {
+  if (!mail.enabled || !notifyOn.has(kind)) return;
+  mail.notify(kind,to,'[Kanal Doluluk] '+subject,lines.join('\n')+(publicUrl?'\n\nPanel: '+publicUrl+'/':''));
+}
+const scopeText = (spec,kind) => (kind==='prune'?'Eski kayıt temizliği · ':'')+(spec.channel||'Tüm kanallar')+' · '+(spec.start==='1970-01-01'?'... - ':spec.start+' - ')+spec.end;
 const stateFile = path.join(dir,'archive.json.gz');
 const worker = new vm.Script(fs.readFileSync(path.join(root,'worker.js'),'utf8'));
 const XLSX = require('./public/xlsx.full.min.js');
@@ -100,6 +114,54 @@ async function save(next,reason) {
   try { fs.writeFileSync(staged,zipped,{mode:0o600}); fs.renameSync(staged,stateFile); }
   finally { fs.rmSync(staged,{force:true}); }
   state=next; snapshot=zipped;
+}
+// ---- Silme talepleri: Yonetici gerekceyle talep eder, Super-yonetici onaylar/reddeder (Super-yonetici gerekceyle dogrudan siler).
+const reqFile = path.join(dir,'delete-requests.json');
+let requests = fs.existsSync(reqFile) ? JSON.parse(fs.readFileSync(reqFile,'utf8')).requests : [];
+function saveRequests() {
+  requests = requests.slice(-500);
+  const staged = reqFile+'.'+randomUUID()+'.tmp';
+  try { fs.writeFileSync(staged,JSON.stringify({requests}),{mode:0o600}); fs.renameSync(staged,reqFile); }
+  finally { fs.rmSync(staged,{force:true}); }
+}
+const splitKey = k => { const p = k.lastIndexOf('|'); return [k.slice(0,p),k.slice(p+1)]; };
+const inSpec = (spec,c,d) => d >= spec.start && d <= spec.end && (!spec.channel || c === spec.channel);
+function countDelete(spec) {
+  let removed = 0;
+  for (const r of state.rows) if (inSpec(spec,r[0],r[6])) removed++;
+  const coverageRemoved = state.coverage.filter(k => inSpec(spec,...splitKey(k))).length;
+  return {removed,coverageRemoved,kept:state.rows.length-removed};
+}
+async function executeDelete(spec,ctx,meta) {
+  const c = countDelete(spec);
+  if (c.removed || c.coverageRemoved) {
+    const keep = k => !inSpec(spec,...splitKey(k));
+    await save({...state,rows:state.rows.filter(r=>!inSpec(spec,r[0],r[6])),coverage:state.coverage.filter(keep),verified:state.verified.filter(keep)},'delete');
+    auth.audit('data-delete',ctx,{start:spec.start,end:spec.end,channel:spec.channel||'tum kanallar',...c,...meta});
+  }
+  return c;
+}
+function reasonOf(v) {
+  const r = String(v==null?'':v).replace(/\s+/g,' ').trim();
+  if (r.length < 10 || r.length > 500) throw bad('Silme gerekcesi 10-500 karakter olmali.');
+  return r;
+}
+// exclusive() icinde cagrilir. Super-yonetici dogrudan siler; Yonetici icin bekleyen talep olusturur.
+async function submitDeletion(spec,reason,ctx,who,isSuper,kind) {
+  const rec = {id:randomUUID().slice(0,8),kind,start:spec.start,end:spec.end,channel:spec.channel,reason,requestedBy:who.username,requestedAt:new Date().toISOString(),status:'pending'};
+  if (isSuper) {
+    const result = await executeDelete(spec,ctx,{requestId:rec.id,reason,kind});
+    Object.assign(rec,{status:'approved',auto:true,decidedBy:who.username,decidedAt:rec.requestedAt,result});
+    requests.push(rec); saveRequests();
+    return {done:true,id:rec.id,...result};
+  }
+  if (requests.filter(r=>r.status==='pending'&&r.requestedBy===who.username).length >= 5) throw bad('En fazla 5 bekleyen silme talebiniz olabilir. Birini iptal edin veya karar bekleyin.',409);
+  const c = countDelete(spec);
+  rec.impact = {removed:c.removed,coverageRemoved:c.coverageRemoved};
+  requests.push(rec); saveRequests();
+  auth.audit('delete-request',ctx,{id:rec.id,kind,start:spec.start,end:spec.end,channel:spec.channel||'tum kanallar',removed:c.removed,reason});
+  notify('delete-request',supers(who.username),'Silme talebi onayınızı bekliyor',[who.username+' bir silme talebi açtı.','','Kapsam: '+scopeText(spec,kind),'Etkilenecek kayıt: '+c.removed,'Gerekçe: '+reason,'','Onaylamak veya reddetmek için panelde "Silme talepleri" ekranını açın.']);
+  return {pending:true,id:rec.id,removed:c.removed};
 }
 function eq(a,b) {
   const x=Buffer.from(a||''),y=Buffer.from(b);
@@ -220,7 +282,16 @@ http.createServer(async(req,res)=>{
       res.setHeader('Set-Cookie',cookieHeader(req,r.cookie,43200));
       return send(res,200,{ok:true});
     }
-    if(route==='/api/users'&&method==='GET') {need(2); return send(res,200,{users:auth.listUsers()});}
+    if(route==='/api/users'&&method==='GET') {need(2); return send(res,200,{users:auth.listUsers(),mail:{enabled:mail.enabled,from:mail.from,notifyOn:[...notifyOn],extraRecipients:extraRecipients.length}});}
+    if(route==='/api/mail-test'&&method==='POST') {
+      need(2); panel(req);
+      const to=auth.emailFor(me.username);
+      if(!to) throw bad(me.breakGlass?'Acil durum (admin) hesabinin e-posta adresi yoktur. Test icin kisi hesabinizla girin.':'Hesabiniza bir e-posta adresi ekleyin (Kullanicilar > E-posta); test e-postasi oraya gider.');
+      try { await mail.sendNow(to,'[Kanal Doluluk] Test e-postası','Bu bir test e-postasıdır. E-posta bildirimi çalışıyor.'+(publicUrl?'\n\nPanel: '+publicUrl+'/':'')); }
+      catch(err) { auth.audit('mail-test',ctx,{ok:false,error:String(err.message).slice(0,200)}); throw bad('E-posta gonderilemedi: '+String(err.message).slice(0,200),502); }
+      auth.audit('mail-test',ctx,{ok:true,to});
+      return send(res,200,{ok:true,to});
+    }
     if(route==='/api/users'&&method==='POST') {
       need(2); panel(req);
       const input=await json(req,2048);
@@ -249,27 +320,74 @@ http.createServer(async(req,res)=>{
       res.writeHead(200,{'Content-Type':'application/json','Content-Encoding':'gzip'});
       return res.end(snapshot);
     }
-    if(method==='POST'&&['/api/import','/api/rules','/api/restore','/api/prune'].includes(route)) {
+    if(route==='/api/delete-requests'&&method==='GET') {
+      need(1);
+      const mine=isSuper?requests:requests.filter(r=>r.requestedBy===me.username);
+      const list=mine.slice(-200).reverse().map(r=>r.status==='pending'?{...r,impact:countDelete(r)}:r);
+      return send(res,200,{requests:list,pending:mine.filter(r=>r.status==='pending').length});
+    }
+    if(route==='/api/delete-requests'&&method==='POST') {
+      need(1); panel(req);
+      const input=await json(req,2048);
+      return await exclusive(async()=>{
+        const rec=requests.find(r=>r.id===input.id);
+        if(!rec) throw bad('Talep bulunamadi.',404);
+        if(rec.status!=='pending') throw bad('Bu talep zaten sonuclandirilmis.',409);
+        const note=String(input.note||'').replace(/\s+/g,' ').trim().slice(0,300);
+        const detail={id:rec.id,requestedBy:rec.requestedBy,start:rec.start,end:rec.end,channel:rec.channel||'tum kanallar',reason:rec.reason,note};
+        if(input.op==='cancel') {
+          if(rec.requestedBy!==me.username&&!isSuper) {auth.audit('denied',ctx,{route,method});throw bad('Yalnizca talebi acan kisi veya super-yonetici iptal edebilir.',403);}
+          Object.assign(rec,{status:'cancelled',decidedBy:me.username,decidedAt:new Date().toISOString(),note});
+          auth.audit('delete-cancel',ctx,detail);
+        } else if(input.op==='approve'||input.op==='reject') {
+          need(2);
+          if(rec.requestedBy===me.username) throw bad('Kendi talebinizi onaylayamaz veya reddedemezsiniz.',403);
+          if(input.op==='reject') {
+            Object.assign(rec,{status:'rejected',decidedBy:me.username,decidedAt:new Date().toISOString(),note});
+            auth.audit('delete-reject',ctx,detail);
+          } else {
+            const result=await executeDelete(rec,ctx,{requestId:rec.id,reason:rec.reason,kind:rec.kind,requestedBy:rec.requestedBy,approvedBy:me.username});
+            Object.assign(rec,{status:'approved',decidedBy:me.username,decidedAt:new Date().toISOString(),note,result});
+            auth.audit('delete-approve',ctx,{...detail,...result});
+          }
+        } else throw bad('Gecersiz islem.');
+        saveRequests();
+        if(rec.status==='approved'||rec.status==='rejected'||(rec.status==='cancelled'&&rec.requestedBy!==me.username)) {
+          const word={approved:'onaylandı',rejected:'reddedildi',cancelled:'iptal edildi'}[rec.status];
+          notify('delete-decision',[auth.emailFor(rec.requestedBy)],'Silme talebiniz '+word,['Silme talebiniz '+me.username+' tarafından '+word+'.','','Kapsam: '+scopeText(rec,rec.kind),'Gerekçe: '+rec.reason,...(rec.status==='approved'?['Silinen kayıt: '+rec.result.removed]:[]),...(note?['Not: '+note]:[])]);
+        }
+        return send(res,200,{ok:true,status:rec.status,result:rec.result});
+      });
+    }
+    if(method==='POST'&&['/api/import','/api/rules','/api/restore','/api/prune','/api/delete'].includes(route)) {
       if(!machine) {need(1); panel(req);}
+      if(route==='/api/delete') {
+        // Tarih araligi (+ istege bagli kanal) bazinda veri silme. dry:true yalniz sayar; gercek silme gerekce ister ve Yonetici icin onaya gider.
+        const input=await json(req,4096);
+        const spec={start:String(input.start||''),end:String(input.end||''),channel:input.channel==null?'':String(input.channel)};
+        if(!date(spec.start)||!date(spec.end)||spec.end<spec.start||spec.channel.length>60) throw bad('Gecerli bir tarih araligi secin (baslangic <= bitis).');
+        if(input.dry===true) return send(res,200,{...countDelete(spec),dry:true});
+        const reason=reasonOf(input.reason);
+        return await exclusive(async()=>send(res,200,await submitDeletion(spec,reason,ctx,me,isSuper,'range')));
+      }
       if(route==='/api/prune') {
+        // Saklama suresinden eski kayitlari silme: ayni gerekce + onay akisina girer.
         const keep=Number(url.searchParams.get('keep')||retentionDays), dry=url.searchParams.get('dry')==='1';
         if(!Number.isInteger(keep)||keep<7||keep>1100) throw bad('Gecersiz saklama suresi.');
+        const input=await json(req,4096);
         return await exclusive(async()=>{
           const {last}=archiveSpan();
           if(!last) return send(res,200,{removed:0,kept:0,cutoff:null,dry});
           const cutoff=new Date(Date.parse(last+'T12:00:00Z')-(keep-1)*86400000).toISOString().slice(0,10);
-          const dayOf=k=>k.slice(k.lastIndexOf('|')+1);
-          const rows=state.rows.filter(r=>r[6]>=cutoff);
-          const coverage=state.coverage.filter(k=>dayOf(k)>=cutoff), verified=state.verified.filter(k=>dayOf(k)>=cutoff);
-          const removed=state.rows.length-rows.length;
-          if(!dry&&(removed||coverage.length!==state.coverage.length||verified.length!==state.verified.length)) {
-            await save({...state,rows,coverage,verified},'prune');
-            auth.audit('prune',ctx,{keep,cutoff,removed,kept:rows.length});
-          }
-          return send(res,200,{removed,kept:rows.length,cutoff,dry});
+          const spec={start:'1970-01-01',end:new Date(Date.parse(cutoff+'T12:00:00Z')-86400000).toISOString().slice(0,10),channel:''};
+          const c=countDelete(spec);
+          if(dry||(!c.removed&&!c.coverageRemoved)) return send(res,200,{removed:c.removed,kept:c.kept,cutoff,dry});
+          const out=await submitDeletion(spec,reasonOf(input.reason),ctx,me,isSuper,'prune');
+          return send(res,200,{...out,removed:c.removed,kept:c.kept,cutoff,dry:false});
         });
       }
       if(route==='/api/restore') {
+        need(2); // eski bir goruntuye donmek yeni verileri silebilir: silme ile ayni yetki duzeyi
         const name=url.searchParams.get('name')||'';
         if(!snapName.test(name)||!listSnapshots().some(s=>s.name===name)) throw bad('Anlik goruntu bulunamadi.',404);
         return await exclusive(async()=>{
@@ -290,10 +408,18 @@ http.createServer(async(req,res)=>{
         return await exclusive(async()=>{
           let m;
           try {m=parseImport(body,{mode,start,end,requireDays:machine,expected:machine?state.expectedChannels:[],complete:!machine&&url.searchParams.get('complete')==='1'});}
-          catch(err) {auth.audit('import-rejected',ctx,{mode,start,end,bytes:body.length,reason:String(err.message).slice(0,200)});throw err;}
+          catch(err) {auth.audit('import-rejected',ctx,{mode,start,end,bytes:body.length,reason:String(err.message).slice(0,200)});if(machine)notify('import-rejected',supers(),'Otomatik veri aktarımı REDDEDİLDİ',['Windows otomatik aktarımı şu nedenle reddedildi:',String(err.message).slice(0,300),'','Aralık: '+start+' - '+end,'Arşive hiçbir şey yazılmadı. ADEX dosyasını ve betik günlüğünü kontrol edin.']);throw err;}
           await save({...state,rows:m.rows,coverage:m.coverage,verified:m.verified,updatedAt:new Date().toISOString(),updatedBy:who.username},machine?'import-auto':'import-'+mode);
           auth.audit('import',ctx,{mode,start,end,complete:!machine&&url.searchParams.get('complete')==='1',bytes:body.length,added:m.added,updated:m.updated,skipped:m.skipped,total:m.rows.length,missingChannels:m.missingChannels});
-          return send(res,200,{added:m.added,updated:m.updated,skipped:m.skipped,total:m.rows.length,missingChannels:m.missingChannels,warning:retentionWarning()});
+          const retWarn=retentionWarning();
+          notify(machine?'import-auto':'import',managers(machine?'':who.username),machine?'Otomatik veri aktarımı tamamlandı':'Yeni veri yüklendi',[
+            (machine?'Otomatik aktarım (Windows)':who.username+' (panel)')+' veri yükledi.','',
+            'Yöntem: '+(machine?'otomatik, dönemi yenile':mode==='replace'?'dönemi yenile':'ekle')+(mode==='replace'?' ('+start+' - '+end+')':''),
+            'Eklenen: '+m.added+' · Güncellenen: '+m.updated+' · Atlanan (tekrar): '+m.skipped,
+            'Arşivde toplam: '+m.rows.length+' kayıt',
+            ...(m.missingChannels&&m.missingChannels.length?['','UYARI: dosyada eksik kanallar: '+m.missingChannels.join('; ')]:[]),
+            ...(retWarn?['','UYARI: '+retWarn]:[])]);
+          return send(res,200,{added:m.added,updated:m.updated,skipped:m.skipped,total:m.rows.length,missingChannels:m.missingChannels,warning:retWarn});
         });
       }
       const raw=await read(req,512*1024);

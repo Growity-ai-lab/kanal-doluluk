@@ -5,6 +5,7 @@ const path=require('node:path');
 const {spawn}=require('node:child_process');
 const {once}=require('node:events');
 const XLSX=require('../public/xlsx.full.min.js');
+const {createFakeSmtp}=require('./fake-smtp.cjs');
 const data=fs.mkdtempSync(path.join(os.tmpdir(),'kanal-test-'));
 const env={...process.env,PORT:'18357',DATA_DIR:data,ADMIN_PASSWORD:'test-admin-01234567890',INGEST_TOKEN:'test-ingest-01234567890',SNAPSHOT_KEEP:'3',LOGIN_MAX_FAILS:'4',RETENTION_DAYS:'30'};
 let admin='',viewer='';const bot='Bearer '+env.INGEST_TOKEN;
@@ -27,7 +28,9 @@ async function start(){
 }
 async function stop(){if(proc&&proc.exitCode===null&&proc.signalCode===null){proc.kill();await once(proc,'exit');}}
 const post=(p,auth,body,header=true)=>req(p,auth,{method:'POST',body,headers:header?{'X-Panel-Request':'1'}:{}});
+const fake=createFakeSmtp();
 (async()=>{
+ Object.assign(env,{SMTP_HOST:'127.0.0.1',SMTP_PORT:String(await fake.listen()),SMTP_TLS:'none',SMTP_USER:fake.user,SMTP_PASSWORD:fake.password,MAIL_FROM:'Kanal Doluluk <bildirim@example.com>',NOTIFY_EMAILS:'ops@example.com'});
  await start();
  const anon=await req('/',null,{redirect:'manual'});
  assert.equal(anon.status,302);assert.equal(anon.headers.get('location'),'/login');
@@ -232,15 +235,16 @@ const post=(p,auth,body,header=true)=>req(p,auth,{method:'POST',body,headers:hea
  assert.equal(preview.dry,true);assert.equal(preview.cutoff,'2026-11-21');assert.ok(preview.removed>0);
  assert.equal((await (await req('/api/state',viewer)).json()).rows.length,afterRestart.rows.length); // onizleme silmez
  const snapsBefore=(await (await req('/api/snapshots',admin)).json()).snapshots[0].name;
- const pruned=await (await post('/api/prune?keep=30',admin,'{}')).json();
- assert.equal(pruned.removed,preview.removed);
+ assert.equal((await post('/api/prune?keep=30',admin,'{}')).status,400); // gerekce zorunlu
+ const pruned=await (await post('/api/prune?keep=30',admin,JSON.stringify({reason:'Saklama suresi doldu; 6 aydan eski kayitlar temizleniyor'}))).json();
+ assert.equal(pruned.done,true);assert.equal(pruned.removed,preview.removed);
  const afterPrune=await (await req('/api/state',viewer)).json();
  assert.equal(afterPrune.rows.length,afterRestart.rows.length-pruned.removed);
  assert.ok(afterPrune.rows.every(r=>r[6]>='2026-11-21'));
  assert.ok(afterPrune.coverage.every(k=>k.split('|').pop()>='2026-11-21')&&afterPrune.verified.every(k=>k.split('|').pop()>='2026-11-21'));
  const snapAfter=(await (await req('/api/snapshots',admin)).json()).snapshots[0];
- assert.notEqual(snapAfter.name,snapsBefore);assert.equal(snapAfter.reason,'prune');
- assert.ok((await (await req('/api/audit?event=prune',admin)).json()).entries.some(e=>e.user==='admin'&&e.detail.removed===pruned.removed));
+ assert.notEqual(snapAfter.name,snapsBefore);assert.equal(snapAfter.reason,'delete');
+ assert.ok((await (await req('/api/audit?event=data-delete',admin)).json()).entries.some(e=>e.user==='admin'&&e.detail.kind==='prune'&&e.detail.removed===pruned.removed&&/Saklama suresi/.test(e.detail.reason)));
  assert.equal((await (await post('/api/prune?keep=30',admin,'{}')).json()).removed,0); // ikinci temizlik bir sey silmez
  // Temizlik anlik goruntuden geri alinabilir
  assert.equal((await post('/api/restore?name='+snapAfter.name,admin,'')).status,200);
@@ -277,7 +281,8 @@ const post=(p,auth,body,header=true)=>req(p,auth,{method:'POST',body,headers:hea
  assert.equal((await post('/api/prune?keep=30&dry=1',yon,'{}')).status,200);
  assert.equal((await post('/api/rules',yon,rulesBody)).status,200);
  assert.equal((await req('/api/snapshots',yon)).status,200);
- assert.equal((await post('/api/restore?name=20200101T000000000Z-prune.json.gz',yon,'{}')).status,404); // yetkili ama kayit yok
+ assert.equal((await post('/api/restore?name=20200101T000000000Z-prune.json.gz',yon,'{}')).status,403); // geri yukleme yalniz super-yonetici
+ assert.equal((await post('/api/restore?name=20200101T000000000Z-prune.json.gz',admin,'{}')).status,404); // super-yonetici yetkili ama kayit yok
  assert.equal((await req('/api/users',yon)).status,403);
  assert.equal((await req('/api/audit',yon)).status,403);
  for(const o of [{op:'create',username:'yetkisiz.kisi',password:RP,role:'viewer'},{op:'delete',username:'ekip.bir'},{op:'role',username:'ekip.bir',role:'superadmin'},{op:'reset',username:'ekip.bir',password:RP+'x'}]) assert.equal((await mkAs(yon,o)).status,403,'yonetici '+o.op);
@@ -306,10 +311,165 @@ const post=(p,auth,body,header=true)=>req(p,auth,{method:'POST',body,headers:hea
  assert.ok(roleAudit.some(e=>e.event==='user-delete'&&e.user==='super.bir'&&e.detail.target==='silinecek.kisi'));
  assert.ok(roleAudit.some(e=>e.event==='denied'&&e.user==='yonetici.bir'));
  assert.ok(roleAudit.some(e=>e.event==='denied'&&e.user==='ekip.bir'));
+
+ // Veri sil: gerekce zorunlu; Yonetici talep eder, Super-yonetici onaylar/reddeder; Super-yonetici gerekceyle dogrudan siler
+ const delData=(c,o)=>post('/api/delete',c,JSON.stringify(o));
+ const decide=(c,o)=>post('/api/delete-requests',c,JSON.stringify(o));
+ const rowsNow=async()=>(await (await req('/api/state',yon)).json());
+ const REASON='Yanlis kanal kodlariyla yuklendi; duzeltilmis dosya yeniden yuklenecek.';
+ const range={start:'2027-01-05',end:'2027-01-06',channel:'Atv'};
+ assert.equal((await delData(ekip,{...range,dry:true})).status,403);
+ for(const bad of [{start:'2027-01-06',end:'2027-01-05'},{start:'x',end:'2027-01-06'},{...range,channel:'x'.repeat(61)},{}]) assert.equal((await delData(yon,bad)).status,400);
+ assert.equal((await (await delData(yon,{...range,channel:'Kanal D',dry:true})).json()).removed,0); // baska kanal etkilenmez
+ const dprev=await (await delData(yon,{...range,dry:true})).json();
+ assert.equal(dprev.dry,true);assert.ok(dprev.removed>=2);
+ const base=await rowsNow();
+ // gerekce zorunlu
+ assert.equal((await delData(yon,range)).status,400);
+ assert.equal((await delData(yon,{...range,reason:'kisa'})).status,400);
+ // Yonetici talep olusturur; hicbir sey silinmez
+ const pend=await (await delData(yon,{...range,reason:REASON})).json();
+ assert.equal(pend.pending,true);assert.equal(pend.removed,dprev.removed);
+ assert.equal((await rowsNow()).rows.length,base.rows.length);
+ // talepleri gorme: Ekip goremez; Yonetici kendisininkini, Super-yonetici hepsini
+ assert.equal((await req('/api/delete-requests',ekip)).status,403);
+ const ylist=await (await req('/api/delete-requests',yon)).json();
+ assert.equal(ylist.pending,1);assert.equal(ylist.requests[0].reason,REASON);assert.equal(ylist.requests[0].impact.removed,dprev.removed);
+ assert.ok((await (await req('/api/delete-requests',sup)).json()).requests.some(r=>r.id===pend.id&&r.requestedBy==='yonetici.bir'));
+ // karar yetkisi yalniz Super-yoneticide; kendi talebini onaylayamaz
+ assert.equal((await decide(yon,{op:'approve',id:pend.id})).status,403);
+ assert.equal((await decide(ekip,{op:'approve',id:pend.id})).status,403);
+ assert.equal((await decide(sup,{op:'approve',id:'yok'})).status,404);
+ assert.equal((await decide(sup,{op:'bogus',id:pend.id})).status,400);
+ // Super-yonetici reddeder: hicbir sey silinmez, karar kalici
+ assert.equal((await decide(sup,{op:'reject',id:pend.id,note:'Once sube ile teyit edin'})).status,200);
+ assert.equal((await rowsNow()).rows.length,base.rows.length);
+ assert.equal((await decide(sup,{op:'approve',id:pend.id})).status,409);
+ // Yonetici bekleyen talebini iptal eder
+ const p2=await (await delData(yon,{...range,reason:REASON+' (2)'})).json();
+ assert.equal((await decide(ekip,{op:'cancel',id:p2.id})).status,403);
+ assert.equal((await decide(yon,{op:'cancel',id:p2.id})).status,200);
+ assert.equal((await decide(sup,{op:'approve',id:p2.id})).status,409);
+ // Onaylanan talep silinir: once anlik goruntu, sonra silme
+ const p3=await (await delData(yon,{...range,reason:REASON+' (3)'})).json();
+ const snapTop=(await (await req('/api/snapshots',yon)).json()).snapshots[0].name;
+ const ap=await decide(sup,{op:'approve',id:p3.id,note:'Uygun'});assert.equal(ap.status,200);
+ assert.equal((await ap.json()).result.removed,dprev.removed);
+ const afterDel=await rowsNow();
+ assert.equal(afterDel.rows.length,base.rows.length-dprev.removed);
+ assert.ok(!afterDel.rows.some(r=>r[6]>='2027-01-05'&&r[6]<='2027-01-06'&&r[0]==='Atv'));
+ assert.ok(!afterDel.coverage.some(k=>k==='Atv|2027-01-05'||k==='Atv|2027-01-06'));
+ const snapDel=(await (await req('/api/snapshots',yon)).json()).snapshots[0];
+ assert.notEqual(snapDel.name,snapTop);assert.equal(snapDel.reason,'delete');
+ // denetim: kim, ne zaman, hangi gerekce, kim onayladi
+ const dAudit=(await (await req('/api/audit?limit=500',sup)).json()).entries;
+ assert.ok(dAudit.some(e=>e.event==='delete-request'&&e.user==='yonetici.bir'&&e.detail.reason===REASON));
+ assert.ok(dAudit.some(e=>e.event==='delete-reject'&&e.user==='super.bir'&&e.detail.note==='Once sube ile teyit edin'));
+ assert.ok(dAudit.some(e=>e.event==='delete-cancel'&&e.user==='yonetici.bir'));
+ assert.ok(dAudit.some(e=>e.event==='delete-approve'&&e.user==='super.bir'&&e.detail.requestedBy==='yonetici.bir'));
+ assert.ok(dAudit.some(e=>e.event==='data-delete'&&e.detail.requestId===p3.id&&e.detail.approvedBy==='super.bir'&&e.detail.requestedBy==='yonetici.bir'&&e.detail.reason===REASON+' (3)'));
+ // Yonetici geri yukleyemez (eski goruntuye donmek veri silebilir); Super-yonetici geri alabilir
+ assert.equal((await post('/api/restore?name='+snapDel.name,yon,'{}')).status,403);
+ assert.equal((await post('/api/restore?name='+snapDel.name,sup,'{}')).status,200);
+ assert.equal((await rowsNow()).rows.length,base.rows.length);
+ // Super-yonetici dogrudan siler (gerekce yine zorunlu); kayit otomatik onayli olarak tutulur
+ assert.equal((await delData(sup,range)).status,400);
+ const direct=await (await delData(sup,{...range,reason:REASON+' (dogrudan)'})).json();
+ assert.equal(direct.done,true);assert.equal(direct.removed,dprev.removed);
+ assert.ok((await (await req('/api/delete-requests',sup)).json()).requests.some(r=>r.id===direct.id&&r.status==='approved'&&r.auto===true&&r.decidedBy==='super.bir'));
+ assert.equal((await post('/api/restore?name='+(await (await req('/api/snapshots',sup)).json()).snapshots[0].name,sup,'{}')).status,200);
+ assert.equal((await rowsNow()).rows.length,base.rows.length);
+ // Eski kayit temizligi de ayni akistan gecer: Yonetici talep eder, Super-yonetici reddeder
+ assert.equal((await post('/api/prune?keep=30',yon,'{}')).status,400);
+ const pr=await (await post('/api/prune?keep=30',yon,JSON.stringify({reason:'Saklama suresini asan kayitlar temizlenecek'}))).json();
+ assert.equal(pr.pending,true);assert.ok(pr.removed>0);
+ assert.equal((await rowsNow()).rows.length,base.rows.length);
+ const prRec=(await (await req('/api/delete-requests',sup)).json()).requests.find(r=>r.id===pr.id);
+ assert.equal(prRec.kind,'prune');assert.equal(prRec.start,'1970-01-01');
+ assert.equal((await decide(sup,{op:'reject',id:pr.id})).status,200);
+ // Bekleyen talep siniri (kisi basina 5)
+ const ids=[];
+ for(let i=0;i<5;i++){const x=await delData(yon,{...range,reason:'Sinir testi talebi numara '+i});assert.equal(x.status,200);ids.push((await x.json()).id);}
+ assert.equal((await delData(yon,{...range,reason:'Sinir testi: altinci talep'})).status,409);
+ for(const id of ids) assert.equal((await decide(sup,{op:'cancel',id})).status,200); // Super-yonetici baskasinin talebini iptal edebilir
+ assert.equal((await (await req('/api/delete-requests',yon)).json()).pending,0);
+ // Talepler yeniden baslatmada korunur
+ const keepPending=await (await delData(yon,{...range,reason:'Yeniden baslatma testi icin bekleyen talep'})).json();
+ await stop();await start();
+ const afterRestart2=await (await req('/api/delete-requests',sup)).json();
+ assert.ok(afterRestart2.requests.some(r=>r.id===keepPending.id&&r.status==='pending'));
+ assert.ok(afterRestart2.requests.some(r=>r.id===pr.id&&r.status==='rejected'));
+ assert.equal((await decide(sup,{op:'cancel',id:keepPending.id})).status,200);
+
+ // ---- E-posta bildirimi (sahte SMTP sunucusuyla): kime, ne zaman, hangi icerikle
+ const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+ const gather=async(action,expected)=>{const i=fake.mails.length;const r=await action();const t0=Date.now();while(fake.mails.length<i+expected&&Date.now()-t0<5000)await sleep(25);await sleep(expected?150:350);return {r,mails:fake.mails.slice(i)};};
+ const toSet=m=>m.map(x=>x.to).sort();
+ const SUPERS=['mail.super@example.com','ops@example.com','test.kisi@example.com'];
+ for(const o of [{username:'mail.super@example.com',role:'superadmin'},{username:'yonetici.mail',role:'admin',email:'Yonetici.Mail@Example.com'},{username:'yonetici.iki',role:'admin'},{username:'ekip.mail@example.com',role:'viewer'}]) assert.equal((await mkAs(admin,{op:'create',password:RP,...o})).status,200);
+ assert.equal((await mkAs(admin,{op:'create',username:'bozuk.eposta',password:RP,role:'viewer',email:'gecersiz'})).status,400);
+ assert.equal((await mkAs(admin,{op:'email',username:'yonetici.iki',email:'a b@c'})).status,400);
+ const emUsers=await (await mkAs(admin,{op:'email',username:'yonetici.iki',email:'Yonetici.Iki@Example.com'})).json();
+ assert.equal(emUsers.users.find(u=>u.username==='yonetici.iki').email,'yonetici.iki@example.com'); // kucuk harfe cevrilir
+ assert.equal(emUsers.users.find(u=>u.username==='yonetici.mail').notifyAddress,'yonetici.mail@example.com');
+ assert.equal(emUsers.users.find(u=>u.username==='ekip.mail@example.com').notifyAddress,'ekip.mail@example.com'); // kullanici adi e-postaysa o kullanilir
+ const ms=cookieOf(await login('mail.super@example.com',RP)),ym=cookieOf(await login('yonetici.mail',RP)),yi=cookieOf(await login('yonetici.iki',RP)),em=cookieOf(await login('ekip.mail@example.com',RP));
+ await sleep(300);
+ // durum ve ayar denemesi
+ const mst=await (await req('/api/users',ms)).json();
+ assert.equal(mst.mail.enabled,true);assert.match(mst.mail.from,/bildirim@example\.com/);
+ assert.equal((await req('/api/users',ym)).status,403);
+ assert.equal((await post('/api/mail-test',admin,'{}')).status,400); // acil durum hesabinin e-postasi yok
+ let g=await gather(()=>post('/api/mail-test',ms,'{}'),1);
+ assert.equal(g.r.status,200);assert.deepEqual(toSet(g.mails),['mail.super@example.com']);assert.match(g.mails[0].subject,/Test e-postası/);
+ fake.state.reject=true;
+ const bt=await post('/api/mail-test',ms,'{}');assert.equal(bt.status,502);assert.match((await bt.json()).error,/550/);
+ fake.state.reject=false;
+ // silme talebi -> yalniz super-yoneticilere (+ NOTIFY_EMAILS); talep edene, diger yoneticiye ve ekibe gitmez
+ const mrange={start:'2027-02-01',end:'2027-02-02',channel:'Atv'};
+ await post(append,ym,book(['2027-02-01'],30));await sleep(600);
+ g=await gather(()=>delData(ym,{...mrange,reason:'Yanlis kanal kodlariyla yuklendi; duzeltilmis dosya yuklenecek.'}),SUPERS.length);
+ const reqId=(await g.r.json()).id;
+ assert.deepEqual(toSet(g.mails),SUPERS);
+ assert.match(g.mails[0].subject,/^\[Kanal Doluluk\] Silme talebi onayınızı bekliyor$/);
+ assert.match(g.mails[0].text,/yonetici\.mail bir silme talebi açtı/);assert.match(g.mails[0].text,/Gerekçe: Yanlis kanal kodlariyla/);assert.match(g.mails[0].text,/Etkilenecek kayıt: 1/);assert.match(g.mails[0].text,/Atv/);
+ assert.ok(g.mails.every(m=>m.from==='bildirim@example.com'&&m.encrypted===false));
+ // karar -> talebi acan kisiye
+ g=await gather(()=>decide(ms,{op:'reject',id:reqId,note:'Once sube ile teyit edin'}),1);
+ assert.deepEqual(toSet(g.mails),['yonetici.mail@example.com']);assert.match(g.mails[0].subject,/reddedildi/);assert.match(g.mails[0].text,/Not: Once sube ile teyit edin/);
+ let id2=(await (await delData(ym,{...mrange,reason:'Ikinci talep: onay mesaji denemesi'})).json()).id;await sleep(600);
+ g=await gather(()=>decide(ms,{op:'approve',id:id2}),1);
+ assert.deepEqual(toSet(g.mails),['yonetici.mail@example.com']);assert.match(g.mails[0].subject,/onaylandı/);assert.match(g.mails[0].text,/Silinen kayıt: 1/);
+ const id3=(await (await delData(ym,{...mrange,reason:'Ucuncu talep: iptal denemesi'})).json()).id;await sleep(600);
+ g=await gather(()=>decide(ym,{op:'cancel',id:id3}),0);assert.equal(g.mails.length,0); // kendi iptali icin e-posta yok
+ const id4=(await (await delData(ym,{...mrange,reason:'Dorduncu talep: yonetici iptali'})).json()).id;await sleep(600);
+ g=await gather(()=>decide(ms,{op:'cancel',id:id4}),1);assert.deepEqual(toSet(g.mails),['yonetici.mail@example.com']);assert.match(g.mails[0].subject,/iptal edildi/);
+ // panelden veri yukleme -> yoneticiler ve super-yoneticiler (yukleyen haric); ekibe gitmez
+ g=await gather(()=>post(append,ym,book(['2027-03-01'],30)),SUPERS.length+1);
+ assert.equal(g.r.status,200);assert.deepEqual(toSet(g.mails),[...SUPERS,'yonetici.iki@example.com'].sort());
+ assert.match(g.mails[0].subject,/Yeni veri yüklendi/);assert.match(g.mails[0].text,/yonetici\.mail \(panel\) veri yükledi/);assert.match(g.mails[0].text,/Eklenen: 1 .* Güncellenen: 0/);assert.match(g.mails[0].text,/Arşivde toplam: \d+ kayıt/);
+ // otomatik aktarim -> tum yoneticiler; reddedilirse yalniz super-yoneticilere
+ const wk=['2026-11-13','2026-11-14','2026-11-15'],aurl='/api/import?start=2026-11-13&end=2026-11-15';
+ g=await gather(()=>post(aurl,bot,book(wk,45),false),SUPERS.length+2);
+ assert.equal(g.r.status,200);assert.deepEqual(toSet(g.mails),[...SUPERS,'yonetici.iki@example.com','yonetici.mail@example.com'].sort());
+ assert.match(g.mails[0].subject,/Otomatik veri aktarımı tamamlandı/);assert.match(g.mails[0].text,/Otomatik aktarım \(Windows\)/);
+ g=await gather(()=>post(aurl,bot,book(['2026-11-13'],30),false),SUPERS.length);
+ assert.equal(g.r.status,400);assert.deepEqual(toSet(g.mails),SUPERS);assert.match(g.mails[0].subject,/REDDEDİLDİ/);assert.match(g.mails[0].text,/eksik g[uü]n/i);
+ // ekip hicbir bildirim almaz
+ assert.ok(!fake.mails.some(m=>m.to==='ekip.mail@example.com'),'ekip e-posta aldi');
+ // posta sunucusu hata verse de islem basarili olur; hata denetim kaydina yazilir
+ fake.state.reject=true;
+ const iso=await post(append,ym,book(['2027-03-02'],30));assert.equal(iso.status,200);
+ for(let i=0;i<40&&!(await (await req('/api/audit?event=mail-failed',ms)).json()).entries.some(e=>e.detail.kind==='import'&&/550/.test(e.detail.error));i++)await sleep(100);
+ assert.ok((await (await req('/api/audit?event=mail-failed',ms)).json()).entries.some(e=>e.detail.kind==='import'&&/550/.test(e.detail.error)));
+ fake.state.reject=false;
+ // sifre ve gizli bilgiler e-postada/denetimde gecmez
+ assert.ok(!fake.mails.some(m=>m.text.includes(RP)||m.text.includes(env.INGEST_TOKEN)||m.text.includes(env.ADMIN_PASSWORD)));
+ assert.ok(fake.auths.length>0&&fake.auths.every(a=>a.ok));
  if(process.env.TEST_ADEX_XLSX){
    const sample=await post('/api/import',admin,fs.readFileSync(process.env.TEST_ADEX_XLSX));
    assert.equal(sample.status,200,await sample.clone().text());
    console.log('OK: supplied ADEX workbook accepted.');
  }
  console.log('OK: access controls, Excel import, Monday date validation, replacement, rules, persistence after restart.');
-})().catch(e=>{console.error(e);process.exitCode=1;}).finally(async()=>{await stop();fs.rmSync(data,{recursive:true,force:true});});
+})().catch(e=>{console.error(e);process.exitCode=1;}).finally(async()=>{await stop();await fake.close();fs.rmSync(data,{recursive:true,force:true});});
