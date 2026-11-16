@@ -19,6 +19,12 @@ Mevcut web panelinin ortak arşivli sürümü. Filtreler, kanal/reklamveren/mark
 - **Denetim kaydı:** `DATA_DIR/audit.log` (JSON satırları, 5 MB'ta döner, 10 dosya). Kaydedilenler: giriş, başarısız giriş, çıkış, şifre değişikliği, kullanıcı işlemleri, veri yükleme (kim, mod, aralık, eklenen/güncellenen kayıt), reddedilen yükleme, geri yükleme, kural değişikliği, **Excel çıktısı** (kim, aralık, filtreler) ve yetkisiz deneme. Otomatik aktarım `ingest` adıyla görünür. Şifre ve anahtarlar kayda yazılmaz. Yönetici kaydı **Kullanıcılar** ekranından görür. Excel çıktısı kaydı tarayıcıdan bildirildiği için bir kullanıcı bunu atlatabilir; veriyi kaydın dışında almasını engellemez (bkz. aşağıdaki ham veri notu).
 - **Yedek:** `users.json`, `session.key` ve `audit.log` anlık görüntülere dahil değildir; Render disk anlık görüntüsü bunları da kapsar.
 
+## Güvenlik başlıkları (CSP)
+
+Her yanıtta `Content-Security-Policy` gönderilir: betikler yalnızca kendi kaynağımızdan (`script-src 'self'`) çalışır, satır içi betik, `eval` ve dış kaynak yoktur; sayfa çerçeveye alınamaz, `<base>` ve eklenti içeriği kapalıdır. Yalnızca grafik çubuklarının boyutu için stil *öznitelikleri*ne izin verilir (`style-src-attr`); `<style>` blokları ve dış stil dosyaları engelli. Ek olarak `Permissions-Policy`, `Cross-Origin-Opener-Policy` ve `Cross-Origin-Resource-Policy` ayarlıdır; HTTPS arkasında `Strict-Transport-Security` de eklenir.
+
+Bu nedenle arayüz kodu `public/app.js` ve `public/app.css` dosyalarındadır. Sayfalara satır içi `<script>`, `<style>` veya `onclick=` gibi öznitelikler eklemeyin; `npm test` bunu denetler. Yeni bir dış kaynak (CDN, font, analitik) gerekirse `server.cjs` içindeki `CSP` listesini bilinçli olarak genişletin.
+
 ## Veri ve yetkiler
 
 - Ortak arşiv Render diskinin `/var/data/archive.json.gz` dosyasında tutulur; tek servis örneği kullan. Panel ve veri uç noktaları oturum ister; yalnızca `/healthz` ve giriş sayfası herkese açıktır. Otomatik aktarım yalnızca `/api/import` için `INGEST_TOKEN` kullanır.

@@ -1,6 +1,6 @@
 const vm=require('node:vm'),fs=require('node:fs'),assert=require('node:assert/strict');
 const XLSX=require('../public/xlsx.full.min.js'),fflate=require('../public/fflate.js');
-let script=fs.readFileSync(require.resolve('../public/index.html'),'utf8').match(/<script>([\s\S]*?)<\/script>/)[1];
+let script=fs.readFileSync(require.resolve('../public/app.js'),'utf8');
 script=script.slice(0,script.lastIndexOf("$('loadBtn').hidden=true"));
 const el={querySelectorAll:()=>[],remove(){},addEventListener(){}};
 const ctx=vm.createContext({XLSX,fflate,document:{getElementById:()=>el,querySelectorAll:()=>[]},Worker:class{}});

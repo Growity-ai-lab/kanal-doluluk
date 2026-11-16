@@ -32,6 +32,24 @@ const post=(p,auth,body,header=true)=>req(p,auth,{method:'POST',body,headers:hea
  const anon=await req('/',null,{redirect:'manual'});
  assert.equal(anon.status,302);assert.equal(anon.headers.get('location'),'/login');
  assert.equal((await req('/login')).status,200);
+ // CSP: her yanitta bulunur; sayfalar satir ici betik / <style> blogu / olay ozniteligi icermez (politika bozulmasin)
+ const csp=(await req('/login')).headers.get('content-security-policy');
+ assert.match(csp,/script-src 'self'/);
+ assert.ok(!/unsafe-eval|script-src[^;]*unsafe-inline|style-src 'self'[^;]*unsafe-inline/.test(csp));
+ assert.equal((await req('/api/state')).headers.get('content-security-policy'),csp);
+ assert.equal((await req('/login.js')).status,200);assert.equal((await req('/login.css')).status,200);
+ assert.equal((await req('/app.js',null,{redirect:'manual'})).status,302); // uygulama kaynaklari oturum ister
+ for(const f of ['index.html','login.html']){
+   const h=fs.readFileSync(path.resolve(__dirname,'../public/'+f),'utf8');
+   assert.ok(!/<script(?![^>]*\ssrc=)/i.test(h),f+': satir ici betik var');
+   assert.ok(!/<style/i.test(h),f+': <style> blogu var');
+   assert.ok(!/\son[a-z]+\s*=/i.test(h),f+': olay ozniteligi var');
+ }
+ for(const f of ['app.js','login.js','core.js','worker.js']){
+   const j=fs.readFileSync(path.resolve(__dirname,'../public/'+f),'utf8');
+   assert.ok(!/\beval\(|new Function/.test(j),f+': eval/Function var');
+   assert.ok(!/\son(click|change|input|submit|load)=/.test(j),f+': olay ozniteligi uretiliyor');
+ }
  assert.equal((await req('/worker.js',null,{redirect:'manual'})).status,302);
  assert.equal((await req('/api/state')).status,401);
  assert.equal((await req('/api/state',bot)).status,401);

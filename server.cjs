@@ -131,7 +131,14 @@ function parseImport(body,options) {
   if(result.error) throw bad(result.error);
   return result;
 }
-const assets={'/':'index.html','/index.html':'index.html','/worker.js':'worker.js','/core.js':'core.js','/fflate.js':'fflate.js','/xlsx.full.min.js':'xlsx.full.min.js'};
+const assets={'/':'index.html','/index.html':'index.html','/app.js':'app.js','/app.css':'app.css','/worker.js':'worker.js','/core.js':'core.js','/fflate.js':'fflate.js','/xlsx.full.min.js':'xlsx.full.min.js'};
+// Giris sayfasinin kaynaklari oturumsuz da sunulur (icerik gizli degildir).
+const publicAssets={'/login.js':'login.js','/login.css':'login.css'};
+const MIME={'.html':'text/html; charset=utf-8','.js':'application/javascript; charset=utf-8','.css':'text/css; charset=utf-8'};
+const mime=name=>MIME[path.extname(name)];
+// Icerik guvenlik politikasi: betikler yalniz kendi kaynagimizdan; satir ici betik, eval ve dis kaynak yok.
+// Stil ozniteliklerine (grafik cubuk boyutlari) izin verilir; <style> bloklari ve dis stil dosyalari verilmez.
+const CSP=["default-src 'none'","script-src 'self'","style-src 'self'","style-src-attr 'unsafe-inline'","img-src 'self' data:","font-src 'self'","connect-src 'self'","worker-src 'self'","manifest-src 'none'","base-uri 'none'","form-action 'self'","frame-ancestors 'none'","object-src 'none'"].join('; ');
 function date(s) {
   return /^\d{4}-\d{2}-\d{2}$/.test(s) && Number.isFinite(Date.parse(s)) && new Date(s).toISOString().slice(0,10)===s;
 }
@@ -151,11 +158,19 @@ http.createServer(async(req,res)=>{
   res.setHeader('X-Content-Type-Options','nosniff');
   res.setHeader('X-Frame-Options','DENY');
   res.setHeader('Referrer-Policy','no-referrer');
+  res.setHeader('Content-Security-Policy',CSP);
+  res.setHeader('Permissions-Policy','camera=(), microphone=(), geolocation=(), payment=(), usb=()');
+  res.setHeader('Cross-Origin-Opener-Policy','same-origin');
+  res.setHeader('Cross-Origin-Resource-Policy','same-origin');
   if(secureCookie(req)) res.setHeader('Strict-Transport-Security','max-age=31536000');
   try {
     const url=new URL(req.url,'http://localhost');
     const route=url.pathname, method=req.method, ip=clientIp(req);
     if(route==='/healthz'&&method==='GET') return send(res,200,{ok:true});
+    if(method==='GET'&&Object.hasOwn(publicAssets,route)) {
+      res.writeHead(200,{'Content-Type':mime(publicAssets[route])});
+      return res.end(fs.readFileSync(path.join(root,publicAssets[route])));
+    }
     const me=auth.identify(req.headers.cookie);
     if(route==='/login'&&method==='GET') {
       if(me) {res.writeHead(302,{Location:'/'});return res.end();}
@@ -186,7 +201,7 @@ http.createServer(async(req,res)=>{
     const needAdmin=()=>{ if(!isAdmin) {auth.audit('denied',ctx,{route,method});throw bad('Yonetici yetkisi gerekli.',403);} };
     if(method==='GET'&&Object.hasOwn(assets,route)&&me) {
       const name=assets[route];
-      res.writeHead(200,{'Content-Type':name.endsWith('.html')?'text/html; charset=utf-8':'application/javascript; charset=utf-8'});
+      res.writeHead(200,{'Content-Type':mime(name)});
       return res.end(fs.readFileSync(path.join(root,name)));
     }
     if(route==='/api/session'&&method==='GET'&&me) return send(res,200,{admin:isAdmin,username:me.username,role:me.role,breakGlass:me.breakGlass,retentionDays});
