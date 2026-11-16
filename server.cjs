@@ -16,9 +16,16 @@ const worker = new vm.Script(fs.readFileSync(path.join(root,'worker.js'),'utf8')
 const XLSX = require('./public/xlsx.full.min.js');
 const core = new vm.Script(fs.readFileSync(path.join(root,'core.js'),'utf8'));
 const { DEFAULT_RULES } = require('./public/core.js');
-const initial = {rows:[],coverage:[],rules:DEFAULT_RULES,confirmed:false,updatedAt:null};
+const initial = {rows:[],coverage:[],verified:[],expectedChannels:[],rules:DEFAULT_RULES,updatedAt:null};
 let snapshot = fs.existsSync(stateFile) ? fs.readFileSync(stateFile) : gzipSync(JSON.stringify(initial));
 let state = JSON.parse(gunzipSync(snapshot));
+// Eski arsiv: global 'confirmed' bayragi kanal-gun bazli dogrulamaya cevrilir.
+if (!state.verified || !state.expectedChannels || 'confirmed' in state) {
+  state.verified = state.verified || (state.confirmed ? state.coverage.slice() : []);
+  state.expectedChannels = state.expectedChannels || [];
+  delete state.confirmed;
+  snapshot = gzipSync(JSON.stringify(state));
+}
 function save(next) {
   const staged = stateFile+'.'+randomUUID()+'.tmp';
   const zipped = gzipSync(JSON.stringify(next));
@@ -60,7 +67,7 @@ function parseImport(body,options) {
   const ctx=vm.createContext({XLSX,onmessage:null,postMessage:m=>{result=m;}});
   core.runInContext(ctx);
   worker.runInContext(ctx);
-  ctx.onmessage({data:{op:'init',rows:state.rows.slice(),coverage:state.coverage.slice()}});
+  ctx.onmessage({data:{op:'init',rows:state.rows.slice(),coverage:state.coverage.slice(),verified:state.verified.slice()}});
   ctx.onmessage({data:{op:'import',buffer:new Uint8Array(body),...options}});
   if(result.error) throw bad(result.error);
   return result;
@@ -104,15 +111,15 @@ http.createServer(async(req,res)=>{
         if(!['append','replace'].includes(mode)||(mode==='replace'&&(!date(start)||!date(end)||end<start||Date.parse(end)-Date.parse(start)>366*86400000))) throw bad('Gecersiz yenileme araligi.');
         const body=await read(req,35*1024*1024);
         if(body.length<4||body.readUInt32LE(0)!==0x04034b50) throw bad('Gecerli bir XLSX dosyasi secin.');
-        const m=parseImport(body,{mode,start,end,requireDays:machine,complete:!machine&&url.searchParams.get('complete')==='1'});
-        save({...state,rows:m.rows,coverage:m.coverage,confirmed:state.confirmed&&!machine&&url.searchParams.get('complete')==='1',updatedAt:new Date().toISOString()});
-        return send(res,200,{added:m.added,updated:m.updated,skipped:m.skipped,total:m.rows.length});
+        const m=parseImport(body,{mode,start,end,requireDays:machine,expected:machine?state.expectedChannels:[],complete:!machine&&url.searchParams.get('complete')==='1'});
+        save({...state,rows:m.rows,coverage:m.coverage,verified:m.verified,updatedAt:new Date().toISOString()});
+        return send(res,200,{added:m.added,updated:m.updated,skipped:m.skipped,total:m.rows.length,missingChannels:m.missingChannels});
       }
       const raw=await read(req,512*1024);
       let input;
       try {input=JSON.parse(raw);} catch {throw bad('Gecersiz kural verisi.');}
-      if(!input||!input.rules||Array.isArray(input.rules)||typeof input.rules!=='object'||typeof input.confirmed!=='boolean'||Object.entries(input.rules).some(([k,v])=>k.length>320||!k.includes('|')||!['include','exclude','review'].includes(v))) throw bad('Gecersiz kural verisi.');
-      save({...state,rules:input.rules,confirmed:input.confirmed});
+      if(!input||!input.rules||Array.isArray(input.rules)||typeof input.rules!=='object'||!Array.isArray(input.expectedChannels)||input.expectedChannels.length>40||input.expectedChannels.some(c=>typeof c!=='string'||!c.trim()||c.length>60)||Object.entries(input.rules).some(([k,v])=>k.length>320||!k.includes('|')||!['include','exclude','review'].includes(v))) throw bad('Gecersiz kural verisi.');
+      save({...state,rules:input.rules,expectedChannels:[...new Set(input.expectedChannels.map(c=>c.trim()))]});
       return send(res,200,{ok:true});
     }
     send(res,404,{error:'Bulunamadi.'});

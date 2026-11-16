@@ -53,4 +53,9 @@ assert.deepEqual(wk.periods.map(p=>p.name),['2026-11-09','2026-11-16']);
 const two=analyze([row(64800,30),row(64800,40,{ch:'Minor X'})],base,['Atv|2026-11-13','Minor X|2026-11-13'],DEFAULT_RULES);
 assert.deepEqual(two.channels,['Atv','Minor X']);
 assert.deepEqual(analyze([row(64800,30),row(64800,40,{ch:'Minor X'})],{...base,group:'main'},['Atv|2026-11-13','Minor X|2026-11-13'],DEFAULT_RULES).channels,['Atv']);
+// Dogrulanmamis kanal-gun: kapasiteye girer ama sayilir ve matriste isaretlenir
+const two2=analyze([row(64800,30),row(64800,30,{date:'2026-11-14'})],{...base,end:'2026-11-14'},['Atv|2026-11-13','Atv|2026-11-14'],DEFAULT_RULES,['Atv|2026-11-13']);
+assert.equal(two2.unverified,1);assert.equal(two2.missing,0);
+assert.deepEqual(two2.matrix.map(m=>m.unverified),[0,1]);
+assert.equal(analyze([row(64800,30)],base,cov,DEFAULT_RULES).unverified,0); // dogrulama takibi yoksa sayilmaz
 console.log('OK: core calculation (bands, midnight, rules, coverage, share, grouping).');

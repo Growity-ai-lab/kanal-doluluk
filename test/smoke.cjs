@@ -52,12 +52,27 @@ const post=(p,auth,body,header=true)=>req(p,auth,{method:'POST',body,headers:hea
  response=await post('/api/import?mode=append&start=&end=&complete=0',admin,book(['2026-11-12'],30));
  assert.equal(response.status,200,await response.clone().text());
  assert.equal((await post('/api/import?mode=merge',admin,one)).status,400);
- assert.equal((await post('/api/rules',admin,JSON.stringify({rules:{'Normal Spot|Kusak Spot':'include'},confirmed:true}))).status,200);
+ assert.equal((await post('/api/rules',admin,JSON.stringify({rules:{'Normal Spot|Kusak Spot':'include'},expectedChannels:['Atv','Kanal D']}))).status,200);
+ assert.equal((await post('/api/rules',admin,JSON.stringify({rules:{'Normal Spot|Kusak Spot':'include'},confirmed:true}))).status,400);
+ // Beklenen kanal dosyada yoksa uyari doner
+ response=await post(url,bot,book(weekend,45),false);
+ assert.deepEqual((await response.json()).missingChannels,['Kanal D']);
  await stop();await start();
  const state=await (await req('/api/state',viewer)).json();
  assert.equal(state.rows.length,4);
  assert.deepEqual(state.rows.map(r=>r[11]),[30,45,45,45]);
- assert.equal(state.confirmed,true);
+ assert.equal(state.confirmed,undefined);
+ assert.deepEqual(state.expectedChannels,['Atv','Kanal D']);
+ // Otomatik aktarim kanal-gun bazinda dogrular; panelden 'eksiksiz' isaretsiz eklenen gun dogrulanmaz
+ assert.deepEqual([...state.verified].sort(),weekend.map(d=>'Atv|'+d));
+ assert.ok(state.coverage.includes('Atv|2026-11-12'));
+ response=await post('/api/import?mode=append&start=&end=&complete=1',admin,book(['2026-11-12'],30));
+ assert.equal(response.status,200,await response.clone().text());
+ assert.ok((await (await req('/api/state',viewer)).json()).verified.includes('Atv|2026-11-12'));
+ // Dogrulanmis gunler, ayni araligin dogrulanmamis yenilemesiyle dogrulugunu kaybeder
+ response=await post('/api/import?mode=replace&start=2026-11-12&end=2026-11-12&complete=0',admin,book(['2026-11-12'],30));
+ assert.equal(response.status,200,await response.clone().text());
+ assert.ok(!(await (await req('/api/state',viewer)).json()).verified.includes('Atv|2026-11-12'));
  if(process.env.TEST_ADEX_XLSX){
    const sample=await post('/api/import',admin,fs.readFileSync(process.env.TEST_ADEX_XLSX));
    assert.equal(sample.status,200,await sample.clone().text());
