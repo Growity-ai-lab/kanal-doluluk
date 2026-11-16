@@ -9,6 +9,7 @@
 'use strict';
 const target = (process.argv[2] || '').replace(/\/+$/, '');
 if (!/^https?:\/\/[^\s/]+$/.test(target)) { console.error('Kullanim: node test/verify-deploy.cjs https://<servis>.onrender.com'); process.exit(2); }
+if (/servis-adi|<|>|yer-?tutucu|example\.|your-?service/i.test(target)) { console.error('Adres bir yer tutucuya benziyor: ' + target + '\nGercek Render adresini yazin (servis sayfasinin ustunde gorunur). Hicbir istek gonderilmedi.'); process.exit(2); }
 const https = target.startsWith('https://');
 const env = process.env;
 const results = [];
@@ -23,13 +24,17 @@ const header = (r, h) => r.headers.get(h) || '';
   console.log('Sunucu');
   let r;
   try { r = await get('/healthz'); } catch (e) { ok('Sunucuya ulasilir', false, e.message + ' — servis ayakta mi, adres dogru mu?'); process.exit(1); }
-  ok('/healthz 200 ve {"ok":true}', r.status === 200 && (await r.json()).ok === true, 'HTTP ' + r.status);
+  const health = r.status === 200 ? await r.json().catch(() => null) : null;
+  ok('/healthz 200 ve {"ok":true}', !!(health && health.ok === true), 'HTTP ' + r.status);
+  // Kimlik bilgileri YALNIZCA adres bu uygulamayi gercekten yanit veriyorsa gonderilir.
+  if (!(health && health.ok === true)) { console.log('\nBu adres uygulamanin saglik yanitini vermiyor. Kimlik bilgileri ve anahtarlar GONDERILMEDI. Adresi kontrol edin.\n'); process.exit(1); }
   if (https) ok('HTTPS kullaniliyor, HSTS basligi var', /max-age/.test(header(r, 'strict-transport-security')), header(r, 'strict-transport-security') || 'Strict-Transport-Security yok');
   else skip('HTTPS / HSTS', 'adres http:// (canlida https:// kullanin)');
 
   console.log('\nGiris sayfasi ve basliklar');
   r = await get('/login');
   const html = await r.text();
+  const isApp = r.status === 200 && /id="f"/.test(html) && /Kanal Doluluk Analizi/.test(html) && /script-src 'self'/.test(header(r, 'content-security-policy'));
   ok('/login 200 ve giris formu geliyor', r.status === 200 && /id="f"/.test(html), 'HTTP ' + r.status);
   const csp = header(r, 'content-security-policy');
   ok("CSP: script-src 'self', satir ici betik yok", /script-src 'self'/.test(csp) && !/script-src[^;]*unsafe-inline/.test(csp) && !/unsafe-eval/.test(csp), csp ? '' : 'baslik yok');
@@ -48,14 +53,16 @@ const header = (r, h) => r.headers.get(h) || '';
   ok('Yanlis aktarim anahtari reddedilir', r.status === 401, 'HTTP ' + r.status);
 
   console.log('\nOtomatik aktarim anahtari (INGEST_TOKEN)');
-  if (env.VERIFY_INGEST_TOKEN) {
+  if (env.VERIFY_INGEST_TOKEN && !isApp) skip('INGEST_TOKEN', 'adres bu uygulamanin giris sayfasini vermiyor; anahtar gonderilmedi');
+  else if (env.VERIFY_INGEST_TOKEN) {
     r = await get('/api/import?start=2026-01-01&end=2026-01-01', { method: 'POST', headers: { Authorization: 'Bearer ' + env.VERIFY_INGEST_TOKEN }, body: '' });
     const body = await r.json().catch(() => ({}));
     ok('Dogru anahtar kabul edilir (bos dosya 400 ile reddedilir, veri yazilmaz)', r.status === 400 && /XLSX/.test(body.error || ''), 'HTTP ' + r.status + ' ' + (body.error || ''));
   } else skip('INGEST_TOKEN', 'VERIFY_INGEST_TOKEN verilmedi');
 
   console.log('\nGiris yapmis kullanici');
-  if (env.VERIFY_USER && env.VERIFY_PASSWORD) {
+  if (env.VERIFY_USER && env.VERIFY_PASSWORD && !isApp) skip('Oturum kontrolleri', 'adres bu uygulamanin giris sayfasini vermiyor; sifre gonderilmedi');
+  else if (env.VERIFY_USER && env.VERIFY_PASSWORD) {
     r = await get('/api/login', { method: 'POST', headers: { 'X-Panel-Request': '1' }, body: JSON.stringify({ username: env.VERIFY_USER, password: env.VERIFY_PASSWORD }) });
     const login = await r.json().catch(() => ({}));
     ok('Giris basarili', r.status === 200, r.status === 200 ? login.username + ' (' + login.role + ')' : 'HTTP ' + r.status + ' ' + (login.error || ''));
