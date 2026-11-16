@@ -56,7 +56,7 @@ Eski sürüm (React/Vite) Vercel'de, verisi Supabase'te çalışıyordu. Yeni s�
 | Yetki | Ekip | Yönetici | Süper-yönetici |
 |---|:-:|:-:|:-:|
 | Verileri görüntüler, filtreler, Excel çıktısı alır | ✓ | ✓ | ✓ |
-| Excel yükler, dönemi yeniler, eski kayıtları temizler (siler) | | ✓ | ✓ |
+| Excel yükler, dönemi yeniler, **Veri sil** ile tarih aralığı/kanal bazında veri siler, eski kayıtları temizler | | ✓ | ✓ |
 | Hesaplama kuralları, beklenen kanallar, anlık görüntüler ve geri yükleme | | ✓ | ✓ |
 | Kullanıcı ekler, siler, rol ve şifre değiştirir, hesabı kapatır | | | ✓ |
 | Denetim kaydını görür | | | ✓ |
@@ -116,6 +116,10 @@ Ayarlar ekranındaki **Beklenen kanallar** listesi doldurulursa, otomatik aktar�
 Her veri yüklemesinden (panel veya otomatik aktarım) önce mevcut arşivin kopyası `DATA_DIR/snapshots` klasörüne alınır. Son `SNAPSHOT_KEEP` adet saklanır (varsayılan 14; ortam değişkeniyle değiştirilir). Görüntü alınamazsa yükleme yapılmaz; doğrulamada reddedilen yüklemeler görüntü oluşturmaz.
 
 Admin, panelde **Ayarlar → Anlık görüntüler** bölümünden bir kopyayı geri yükleyebilir; geri yüklemeden önce mevcut hâl de kopyalanır, yani geri alma da geri alınabilir. Kural değişiklikleri görüntü almaz. Görüntüler aynı diskte durur: `render.yaml`'daki 1 GB disk, arşiv boyutunun `SNAPSHOT_KEEP + 1` katını karşılamalı. Disk bozulursa bu bir yedek değildir; Render disk anlık görüntüsünü de kullanın.
+
+## Veri silme
+
+Üst menüdeki **Veri sil** düğmesi (Yönetici ve Süper-yönetici) seçilen tarih aralığındaki kayıtları, isteğe bağlı olarak tek bir kanal için, arşivden siler. Akış: tarih aralığını (veya *Tüm tarihleri seç*) ve kanalı seç, **Önizle** ile kaç kaydın silineceğini gör, sonra **Sil** ve onay. Silmeden önce otomatik anlık görüntü alınır (**Ayarlar → Anlık görüntüler**'den *Silme öncesi* olarak geri yüklenir) ve işlem denetim kaydına yazılır. Aynı aralığın kanal-gün kapsamı ve doğrulaması da silinir, böylece boşalan günler "kapsam yok" görünür. Excel'i yeniden yüklemek isteyen için *Veri yükle → Dönemi yenile* ayrıca vardır.
 
 ## Saklama süresi ve temizlik
 

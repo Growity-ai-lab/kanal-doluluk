@@ -249,8 +249,28 @@ http.createServer(async(req,res)=>{
       res.writeHead(200,{'Content-Type':'application/json','Content-Encoding':'gzip'});
       return res.end(snapshot);
     }
-    if(method==='POST'&&['/api/import','/api/rules','/api/restore','/api/prune'].includes(route)) {
+    if(method==='POST'&&['/api/import','/api/rules','/api/restore','/api/prune','/api/delete'].includes(route)) {
       if(!machine) {need(1); panel(req);}
+      if(route==='/api/delete') {
+        // Tarih araligi (+ istege bagli kanal) bazinda veri silme. Silmeden once anlik goruntu alinir; dry:true yalniz sayar.
+        const input=await json(req,2048);
+        const start=String(input.start||''),end=String(input.end||''),channel=input.channel==null?'':String(input.channel);
+        if(!date(start)||!date(end)||end<start||channel.length>60) throw bad('Gecerli bir tarih araligi secin (baslangic <= bitis).');
+        const dry=input.dry===true;
+        return await exclusive(async()=>{
+          const hit=(c,d)=>d>=start&&d<=end&&(!channel||c===channel);
+          const split=k=>{const p=k.lastIndexOf('|');return [k.slice(0,p),k.slice(p+1)];};
+          const rows=state.rows.filter(r=>!hit(r[0],r[6]));
+          const keep=k=>!hit(...split(k));
+          const coverage=state.coverage.filter(keep),verified=state.verified.filter(keep);
+          const removed=state.rows.length-rows.length,coverageRemoved=state.coverage.length-coverage.length;
+          if(!dry&&(removed||coverageRemoved)) {
+            await save({...state,rows,coverage,verified},'delete');
+            auth.audit('data-delete',ctx,{start,end,channel:channel||'tum kanallar',removed,coverageRemoved,kept:rows.length});
+          }
+          return send(res,200,{removed,coverageRemoved,kept:rows.length,dry});
+        });
+      }
       if(route==='/api/prune') {
         const keep=Number(url.searchParams.get('keep')||retentionDays), dry=url.searchParams.get('dry')==='1';
         if(!Number.isInteger(keep)||keep<7||keep>1100) throw bad('Gecersiz saklama suresi.');

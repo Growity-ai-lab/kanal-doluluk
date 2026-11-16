@@ -306,6 +306,30 @@ const post=(p,auth,body,header=true)=>req(p,auth,{method:'POST',body,headers:hea
  assert.ok(roleAudit.some(e=>e.event==='user-delete'&&e.user==='super.bir'&&e.detail.target==='silinecek.kisi'));
  assert.ok(roleAudit.some(e=>e.event==='denied'&&e.user==='yonetici.bir'));
  assert.ok(roleAudit.some(e=>e.event==='denied'&&e.user==='ekip.bir'));
+
+ // Veri sil: Ekip yapamaz; Yonetici tarih araligi (+ istege bagli kanal) bazinda siler, once anlik goruntu alinir
+ const delData=(c,o)=>post('/api/delete',c,JSON.stringify(o));
+ const rowsNow=async()=>(await (await req('/api/state',yon)).json());
+ assert.equal((await delData(ekip,{start:'2027-01-05',end:'2027-01-06',dry:true})).status,403);
+ for(const bad of [{start:'2027-01-06',end:'2027-01-05'},{start:'x',end:'2027-01-06'},{start:'2027-01-05',end:'2027-01-06',channel:'x'.repeat(61)},{}]) assert.equal((await delData(yon,bad)).status,400);
+ assert.equal((await (await delData(yon,{start:'2027-01-05',end:'2027-01-06',channel:'Kanal D',dry:true})).json()).removed,0); // baska kanal etkilenmez
+ const dprev=await (await delData(yon,{start:'2027-01-05',end:'2027-01-06',channel:'Atv',dry:true})).json();
+ assert.equal(dprev.dry,true);assert.ok(dprev.removed>=2);
+ const beforeDel=await rowsNow(), snapTop=(await (await req('/api/snapshots',yon)).json()).snapshots[0].name;
+ assert.equal(beforeDel.rows.length,(await rowsNow()).rows.length); // onizleme silmez
+ const dres=await (await delData(yon,{start:'2027-01-05',end:'2027-01-06',channel:'Atv'})).json();
+ assert.equal(dres.removed,dprev.removed);
+ const afterDel=await rowsNow();
+ assert.equal(afterDel.rows.length,beforeDel.rows.length-dres.removed);
+ assert.ok(!afterDel.rows.some(r=>r[6]>='2027-01-05'&&r[6]<='2027-01-06'&&r[0]==='Atv'));
+ assert.ok(!afterDel.coverage.some(k=>k==='Atv|2027-01-05'||k==='Atv|2027-01-06'));
+ const snapDel=(await (await req('/api/snapshots',yon)).json()).snapshots[0];
+ assert.notEqual(snapDel.name,snapTop);assert.equal(snapDel.reason,'delete');
+ assert.ok((await (await req('/api/audit?event=data-delete',sup)).json()).entries.some(e=>e.user==='yonetici.bir'&&e.detail.removed===dres.removed&&e.detail.channel==='Atv'));
+ assert.equal((await (await delData(yon,{start:'2027-01-05',end:'2027-01-06',channel:'Atv'})).json()).removed,0); // ikinci silme bir sey silmez
+ assert.equal((await (await req('/api/snapshots',yon)).json()).snapshots[0].name,snapDel.name); // ... ve yeni goruntu olusturmaz
+ assert.equal((await post('/api/restore?name='+snapDel.name,yon,'{}')).status,200); // silme geri alinabilir
+ assert.equal((await rowsNow()).rows.length,beforeDel.rows.length);
  if(process.env.TEST_ADEX_XLSX){
    const sample=await post('/api/import',admin,fs.readFileSync(process.env.TEST_ADEX_XLSX));
    assert.equal(sample.status,200,await sample.clone().text());
