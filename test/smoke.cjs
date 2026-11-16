@@ -253,6 +253,12 @@ const post=(p,auth,body,header=true)=>req(p,auth,{method:'POST',body,headers:hea
  const mkAs=(c,o)=>post('/api/users',c,JSON.stringify(o));
  for(const [u,role] of [['ekip.bir','viewer'],['yonetici.bir','admin'],['super.bir','superadmin']]) assert.equal((await mkAs(admin,{op:'create',username:u,password:RP,role})).status,200);
  assert.equal((await mkAs(admin,{op:'create',username:'bozuk.rol',password:RP,role:'patron'})).status,400);
+ // E-posta bicimli kullanici adi: gecerli olan kabul edilir, bozuk bicimler ve buyuk harf reddedilir; giris buyuk/kucuk harfe duyarsizdir
+ for(const bad of ['a@b','bos bosluk@x.com','@x.com','x@@y.com','x@y..com','Buyuk.Harf@x.com','x@y.com.','admin@x.com@z.com']) assert.equal((await mkAs(admin,{op:'create',username:bad,password:RP,role:'viewer'})).status,400,'kabul edilmemeli: '+bad);
+ assert.equal((await mkAs(admin,{op:'create',username:'test.kisi@example.com',password:RP,role:'superadmin'})).status,200);
+ const mailSes=await login('Test.Kisi@Example.com',RP);assert.equal(mailSes.status,200);
+ const mailJson=await (await req('/api/session',cookieOf(mailSes))).json();
+ assert.deepEqual([mailJson.username,mailJson.role,mailJson.superadmin],['test.kisi@example.com','superadmin',true]);
  const ekip=cookieOf(await login('ekip.bir',RP)),yon=cookieOf(await login('yonetici.bir',RP)),sup=cookieOf(await login('super.bir',RP));
  const sess=async c=>{const j=await (await req('/api/session',c)).json();return [j.role,j.admin,j.superadmin];};
  assert.deepEqual(await sess(ekip),['viewer',false,false]);
