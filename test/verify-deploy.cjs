@@ -81,6 +81,7 @@ const header = (r, h) => r.headers.get(h) || '';
       else { r = await get('/api/snapshots', H); ok('Ekip kullanicisi anlik goruntulere giremez', r.status === 403, 'HTTP ' + r.status); }
       if (ses.superadmin) {
         r = await get('/api/users', H); const us = await r.json(); ok('Kullanici listesi (super-yonetici)', r.status === 200, (us.users || []).length + ' kisi hesabi');
+        console.log('  i E-posta bildirimi: ' + (us.mail && us.mail.enabled ? 'acik (gonderen: ' + us.mail.from + ')' : 'kapali (SMTP ayarlari tanimli degil)'));
         r = await get('/api/audit?limit=5', H); const au = await r.json(); ok('Denetim kaydi (super-yonetici)', r.status === 200, (au.entries || []).length + ' son kayit');
       } else {
         r = await get('/api/users', H); ok('Kullanici yonetimi yalniz super-yoneticiye acik', r.status === 403, 'HTTP ' + r.status);

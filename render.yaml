@@ -30,3 +30,7 @@ services:
         sync: false
       - key: INGEST_TOKEN    # Windows otomatik aktarimi icin; ADMIN_PASSWORD'den farkli, en az 20 karakter
         sync: false
+      # E-posta bildirimi (istege bagli): asagidaki degiskenleri Render panelinde Environment sekmesine ekleyin
+      # (README: "E-posta bildirimi"). Degerler depoya yazilmaz.
+      #   SMTP_HOST, SMTP_PORT (465 veya 587), SMTP_USER, SMTP_PASSWORD, MAIL_FROM
+      #   istege bagli: PUBLIC_URL, NOTIFY_ON, NOTIFY_EMAILS

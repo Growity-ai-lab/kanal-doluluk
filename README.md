@@ -120,6 +120,41 @@ Her veri yüklemesinden (panel veya otomatik aktarım) önce mevcut arşivin kop
 
 Admin, panelde **Ayarlar → Anlık görüntüler** bölümünden bir kopyayı geri yükleyebilir; geri yüklemeden önce mevcut hâl de kopyalanır, yani geri alma da geri alınabilir. Kural değişiklikleri görüntü almaz. Görüntüler aynı diskte durur: `render.yaml`'daki 1 GB disk, arşiv boyutunun `SNAPSHOT_KEEP + 1` katını karşılamalı. Disk bozulursa bu bir yedek değildir; Render disk anlık görüntüsünü de kullanın.
 
+## E-posta bildirimi
+
+Sunucu, sağlayıcıdan bağımsız SMTP ile e-posta gönderir (ek paket gerekmez). Ayarlar yalnızca Render'daki ortam değişkenleridir; **hiçbiri depoya yazılmaz**. Beşi de tanımlıysa bildirim açılır, yoksa kapalı kalır (panelde "Kullanıcılar" ekranında durumu görünür).
+
+| Ortam değişkeni | Anlamı |
+|---|---|
+| `SMTP_HOST` | SMTP sunucusu (örn. `smtp.gmail.com`) |
+| `SMTP_PORT` | `465` (doğrudan TLS, varsayılan) veya `587` (STARTTLS). `SMTP_SECURE=true/false` ile değiştirilir |
+| `SMTP_USER`, `SMTP_PASSWORD` | Gönderen posta kutusunun kullanıcı adı ve şifresi (uygulama şifresi / API anahtarı) |
+| `MAIL_FROM` | Gönderen, örn. `Kanal Doluluk <bildirim@sirket.com>` (sağlayıcının izin verdiği adres) |
+| `PUBLIC_URL` | (isteğe bağlı) e-postadaki panel bağlantısı; Render'da `RENDER_EXTERNAL_URL` otomatik kullanılır |
+| `NOTIFY_ON` | (isteğe bağlı) virgülle ayrılmış bildirim türleri; varsayılan hepsi: `delete-request,delete-decision,import,import-auto,import-rejected` |
+| `NOTIFY_EMAILS` | (isteğe bağlı) hesabı olmayan ek alıcılar; süper-yönetici ve yönetici bildirimlerine eklenir |
+
+**Kime ne gider**
+
+| Olay | Alıcı |
+|---|---|
+| Yönetici silme talebi açtı (`delete-request`) | Süper-yöneticiler: gerekçe, kapsam, etkilenecek kayıt sayısı |
+| Talep onaylandı / reddedildi / süper-yönetici iptal etti (`delete-decision`) | Talebi açan kişi (not dahil) |
+| Panelden veri yüklendi (`import`) | Yöneticiler ve süper-yöneticiler (yükleyen hariç): eklenen/güncellenen/atlanan, arşiv toplamı, uyarılar |
+| Otomatik (Windows) aktarım tamamlandı (`import-auto`) | Yöneticiler ve süper-yöneticiler: aynı özet, eksik kanal ve saklama uyarısı |
+| Otomatik aktarım reddedildi (`import-rejected`) | Süper-yöneticiler: neden ve aralık |
+
+Ekip kullanıcıları bildirim almaz. Alıcının adresi, kullanıcının **E-posta** alanıdır (Kullanıcılar ekranından eklenir/düzenlenir); alan boşsa ve kullanıcı adı e-posta biçimindeyse (`ad@sirket.com`) kullanıcı adı kullanılır. Adresi olmayan kullanıcıya bildirim gitmez. Her alıcıya ayrı ileti gider, adresler birbirini görmez.
+
+**Kurulum:** Render → servis → *Environment* → yukarıdaki değişkenleri ekle → kaydet (servis yeniden başlar). Sonra kendi kişi hesabına e-posta ekleyip **Kullanıcılar → Test e-postası gönder**'e bas. Hata olursa ekranda sunucunun yanıtı görünür (şifre görünmez).
+
+- **Google Workspace:** `smtp.gmail.com`, `465`, kullanıcı = gönderen posta kutusunun tam adresi, şifre = o hesap için üretilmiş **uygulama şifresi** (hesapta 2 adımlı doğrulama açık olmalı ve yönetici konsolunda izin verilmiş olmalı), `MAIL_FROM` aynı adres.
+- **SendGrid / Brevo / Resend / Mailgun:** sağlayıcının SMTP bilgilerini gir (örn. SendGrid: `smtp.sendgrid.net`, kullanıcı `apikey`, şifre = API anahtarı); gönderen alan adını sağlayıcıda doğrulamak gerekir.
+- **Microsoft 365:** `smtp.office365.com`, `587`; yönetici SMTP AUTH'u o posta kutusu için açmalıdır ve Microsoft temel kimlik doğrulamayı kademeli olarak kapatmaktadır; sorun yaşarsan yukarıdaki sağlayıcılardan birini tercih et.
+- Render'ın **ücretsiz** planı SMTP portlarını engeller; ücretli (Pro) planda açıktır.
+
+**Güvenlik ve davranış:** Şifre yalnızca şifreli bağlantıda (465 veya STARTTLS) gönderilir; sunucu şifreli bağlantı sunmazsa kimlik bilgisi hiç gönderilmez ve sertifika doğrulaması kapatılamaz. E-posta hataları işlemi bozmaz: yükleme/silme yine tamamlanır, hata denetim kaydına `E-posta gönderilemedi` olarak yazılır. E-postalara yalnızca özet bilgi ve panel bağlantısı konur; ADEX kayıtları, şifreler veya anahtarlar konmaz. Bildirimler anlık değil sıralı gönderilir (kuyruk 100 ileti ile sınırlıdır).
+
 ## Veri silme (gerekçe ve süper-yönetici onayı)
 
 Veri azaltan işlemler gerekçe ister ve **süper-yönetici onayından** geçer:
