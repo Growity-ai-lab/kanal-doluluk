@@ -56,8 +56,11 @@ Eski sürüm (React/Vite) Vercel'de, verisi Supabase'te çalışıyordu. Yeni s�
 | Yetki | Ekip | Yönetici | Süper-yönetici |
 |---|:-:|:-:|:-:|
 | Verileri görüntüler, filtreler, Excel çıktısı alır | ✓ | ✓ | ✓ |
-| Excel yükler, dönemi yeniler, **Veri sil** ile tarih aralığı/kanal bazında veri siler, eski kayıtları temizler | | ✓ | ✓ |
-| Hesaplama kuralları, beklenen kanallar, anlık görüntüler ve geri yükleme | | ✓ | ✓ |
+| Excel yükler, dönemi yeniler | | ✓ | ✓ |
+| Veri silme (**Veri sil**, **Eski kayıtları temizle**) için gerekçeli talep açar, kendi taleplerini görür/iptal eder | | ✓ | ✓ |
+| Silme taleplerini onaylar veya reddeder; gerekçe yazarak doğrudan siler | | | ✓ |
+| Hesaplama kuralları, beklenen kanallar, anlık görüntü listesi | | ✓ | ✓ |
+| Anlık görüntüden geri yükler | | | ✓ |
 | Kullanıcı ekler, siler, rol ve şifre değiştirir, hesabı kapatır | | | ✓ |
 | Denetim kaydını görür | | | ✓ |
 
@@ -117,9 +120,17 @@ Her veri yüklemesinden (panel veya otomatik aktarım) önce mevcut arşivin kop
 
 Admin, panelde **Ayarlar → Anlık görüntüler** bölümünden bir kopyayı geri yükleyebilir; geri yüklemeden önce mevcut hâl de kopyalanır, yani geri alma da geri alınabilir. Kural değişiklikleri görüntü almaz. Görüntüler aynı diskte durur: `render.yaml`'daki 1 GB disk, arşiv boyutunun `SNAPSHOT_KEEP + 1` katını karşılamalı. Disk bozulursa bu bir yedek değildir; Render disk anlık görüntüsünü de kullanın.
 
-## Veri silme
+## Veri silme (gerekçe ve süper-yönetici onayı)
 
-Üst menüdeki **Veri sil** düğmesi (Yönetici ve Süper-yönetici) seçilen tarih aralığındaki kayıtları, isteğe bağlı olarak tek bir kanal için, arşivden siler. Akış: tarih aralığını (veya *Tüm tarihleri seç*) ve kanalı seç, **Önizle** ile kaç kaydın silineceğini gör, sonra **Sil** ve onay. Silmeden önce otomatik anlık görüntü alınır (**Ayarlar → Anlık görüntüler**'den *Silme öncesi* olarak geri yüklenir) ve işlem denetim kaydına yazılır. Aynı aralığın kanal-gün kapsamı ve doğrulaması da silinir, böylece boşalan günler "kapsam yok" görünür. Excel'i yeniden yüklemek isteyen için *Veri yükle → Dönemi yenile* ayrıca vardır.
+Veri azaltan işlemler gerekçe ister ve **süper-yönetici onayından** geçer:
+
+- **Veri sil** (üst menü): tarih aralığı ve isteğe bağlı kanal seç, **Önizle** ile kaç kaydın etkileneceğini gör, **gerekçe** yaz (en az 10 karakter). Yönetici için düğme **Onaya gönder** olur: talep açılır, **hiçbir şey silinmez**. Süper-yönetici için düğme **Sil**'dir ve gerekçeyle doğrudan siler (kayıt "otomatik onaylı" olarak tutulur).
+- **Eski kayıtları temizle** (saklama sınırı uyarısındaki düğme): aynı akıştan geçer; gerekçe sorulur, yönetici için talep açılır.
+- **Silme talepleri** (üst menü, bekleyen sayısı rozetle gösterilir): süper-yönetici gerekçeyi ve etkilenecek kayıt sayısını görür, **Onayla** (silme anında yapılır, öncesinde anlık görüntü alınır) veya **Reddet** (nedeniyle) der. Talebi açan kişi, bekleyen talebini iptal edebilir; süper-yönetici de iptal edebilir. Kimse kendi talebini onaylayamaz. Yönetici kendi taleplerini ve durumlarını görür; en fazla 5 bekleyen talebi olabilir.
+- **Geri yükleme** yalnızca süper-yöneticidedir, çünkü eski bir görüntüye dönmek sonradan eklenen verileri de siler.
+- **Denetim kaydı:** talep, onay, ret, iptal ve silmenin kendisi (`gerekçe`, talep eden, onaylayan, silinen kayıt sayısı) kaydedilir. Talepler `DATA_DIR/delete-requests.json` içinde durur ve yeniden başlatmada korunur.
+
+Aynı aralığın kanal-gün kapsamı ve doğrulaması da silinir; boşalan günler "kapsam yok" görünür. Sınır: *Veri yükle → Dönemi yenile* bir dönemin eski kayıtlarını yeni dosyayla değiştirir (yönetici yapabilir, denetim kaydına yazılır); bunun için ayrı bir onay yoktur.
 
 ## Saklama süresi ve temizlik
 

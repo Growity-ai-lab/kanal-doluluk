@@ -232,15 +232,16 @@ const post=(p,auth,body,header=true)=>req(p,auth,{method:'POST',body,headers:hea
  assert.equal(preview.dry,true);assert.equal(preview.cutoff,'2026-11-21');assert.ok(preview.removed>0);
  assert.equal((await (await req('/api/state',viewer)).json()).rows.length,afterRestart.rows.length); // onizleme silmez
  const snapsBefore=(await (await req('/api/snapshots',admin)).json()).snapshots[0].name;
- const pruned=await (await post('/api/prune?keep=30',admin,'{}')).json();
- assert.equal(pruned.removed,preview.removed);
+ assert.equal((await post('/api/prune?keep=30',admin,'{}')).status,400); // gerekce zorunlu
+ const pruned=await (await post('/api/prune?keep=30',admin,JSON.stringify({reason:'Saklama suresi doldu; 6 aydan eski kayitlar temizleniyor'}))).json();
+ assert.equal(pruned.done,true);assert.equal(pruned.removed,preview.removed);
  const afterPrune=await (await req('/api/state',viewer)).json();
  assert.equal(afterPrune.rows.length,afterRestart.rows.length-pruned.removed);
  assert.ok(afterPrune.rows.every(r=>r[6]>='2026-11-21'));
  assert.ok(afterPrune.coverage.every(k=>k.split('|').pop()>='2026-11-21')&&afterPrune.verified.every(k=>k.split('|').pop()>='2026-11-21'));
  const snapAfter=(await (await req('/api/snapshots',admin)).json()).snapshots[0];
- assert.notEqual(snapAfter.name,snapsBefore);assert.equal(snapAfter.reason,'prune');
- assert.ok((await (await req('/api/audit?event=prune',admin)).json()).entries.some(e=>e.user==='admin'&&e.detail.removed===pruned.removed));
+ assert.notEqual(snapAfter.name,snapsBefore);assert.equal(snapAfter.reason,'delete');
+ assert.ok((await (await req('/api/audit?event=data-delete',admin)).json()).entries.some(e=>e.user==='admin'&&e.detail.kind==='prune'&&e.detail.removed===pruned.removed&&/Saklama suresi/.test(e.detail.reason)));
  assert.equal((await (await post('/api/prune?keep=30',admin,'{}')).json()).removed,0); // ikinci temizlik bir sey silmez
  // Temizlik anlik goruntuden geri alinabilir
  assert.equal((await post('/api/restore?name='+snapAfter.name,admin,'')).status,200);
@@ -277,7 +278,8 @@ const post=(p,auth,body,header=true)=>req(p,auth,{method:'POST',body,headers:hea
  assert.equal((await post('/api/prune?keep=30&dry=1',yon,'{}')).status,200);
  assert.equal((await post('/api/rules',yon,rulesBody)).status,200);
  assert.equal((await req('/api/snapshots',yon)).status,200);
- assert.equal((await post('/api/restore?name=20200101T000000000Z-prune.json.gz',yon,'{}')).status,404); // yetkili ama kayit yok
+ assert.equal((await post('/api/restore?name=20200101T000000000Z-prune.json.gz',yon,'{}')).status,403); // geri yukleme yalniz super-yonetici
+ assert.equal((await post('/api/restore?name=20200101T000000000Z-prune.json.gz',admin,'{}')).status,404); // super-yonetici yetkili ama kayit yok
  assert.equal((await req('/api/users',yon)).status,403);
  assert.equal((await req('/api/audit',yon)).status,403);
  for(const o of [{op:'create',username:'yetkisiz.kisi',password:RP,role:'viewer'},{op:'delete',username:'ekip.bir'},{op:'role',username:'ekip.bir',role:'superadmin'},{op:'reset',username:'ekip.bir',password:RP+'x'}]) assert.equal((await mkAs(yon,o)).status,403,'yonetici '+o.op);
@@ -307,29 +309,94 @@ const post=(p,auth,body,header=true)=>req(p,auth,{method:'POST',body,headers:hea
  assert.ok(roleAudit.some(e=>e.event==='denied'&&e.user==='yonetici.bir'));
  assert.ok(roleAudit.some(e=>e.event==='denied'&&e.user==='ekip.bir'));
 
- // Veri sil: Ekip yapamaz; Yonetici tarih araligi (+ istege bagli kanal) bazinda siler, once anlik goruntu alinir
+ // Veri sil: gerekce zorunlu; Yonetici talep eder, Super-yonetici onaylar/reddeder; Super-yonetici gerekceyle dogrudan siler
  const delData=(c,o)=>post('/api/delete',c,JSON.stringify(o));
+ const decide=(c,o)=>post('/api/delete-requests',c,JSON.stringify(o));
  const rowsNow=async()=>(await (await req('/api/state',yon)).json());
- assert.equal((await delData(ekip,{start:'2027-01-05',end:'2027-01-06',dry:true})).status,403);
- for(const bad of [{start:'2027-01-06',end:'2027-01-05'},{start:'x',end:'2027-01-06'},{start:'2027-01-05',end:'2027-01-06',channel:'x'.repeat(61)},{}]) assert.equal((await delData(yon,bad)).status,400);
- assert.equal((await (await delData(yon,{start:'2027-01-05',end:'2027-01-06',channel:'Kanal D',dry:true})).json()).removed,0); // baska kanal etkilenmez
- const dprev=await (await delData(yon,{start:'2027-01-05',end:'2027-01-06',channel:'Atv',dry:true})).json();
+ const REASON='Yanlis kanal kodlariyla yuklendi; duzeltilmis dosya yeniden yuklenecek.';
+ const range={start:'2027-01-05',end:'2027-01-06',channel:'Atv'};
+ assert.equal((await delData(ekip,{...range,dry:true})).status,403);
+ for(const bad of [{start:'2027-01-06',end:'2027-01-05'},{start:'x',end:'2027-01-06'},{...range,channel:'x'.repeat(61)},{}]) assert.equal((await delData(yon,bad)).status,400);
+ assert.equal((await (await delData(yon,{...range,channel:'Kanal D',dry:true})).json()).removed,0); // baska kanal etkilenmez
+ const dprev=await (await delData(yon,{...range,dry:true})).json();
  assert.equal(dprev.dry,true);assert.ok(dprev.removed>=2);
- const beforeDel=await rowsNow(), snapTop=(await (await req('/api/snapshots',yon)).json()).snapshots[0].name;
- assert.equal(beforeDel.rows.length,(await rowsNow()).rows.length); // onizleme silmez
- const dres=await (await delData(yon,{start:'2027-01-05',end:'2027-01-06',channel:'Atv'})).json();
- assert.equal(dres.removed,dprev.removed);
+ const base=await rowsNow();
+ // gerekce zorunlu
+ assert.equal((await delData(yon,range)).status,400);
+ assert.equal((await delData(yon,{...range,reason:'kisa'})).status,400);
+ // Yonetici talep olusturur; hicbir sey silinmez
+ const pend=await (await delData(yon,{...range,reason:REASON})).json();
+ assert.equal(pend.pending,true);assert.equal(pend.removed,dprev.removed);
+ assert.equal((await rowsNow()).rows.length,base.rows.length);
+ // talepleri gorme: Ekip goremez; Yonetici kendisininkini, Super-yonetici hepsini
+ assert.equal((await req('/api/delete-requests',ekip)).status,403);
+ const ylist=await (await req('/api/delete-requests',yon)).json();
+ assert.equal(ylist.pending,1);assert.equal(ylist.requests[0].reason,REASON);assert.equal(ylist.requests[0].impact.removed,dprev.removed);
+ assert.ok((await (await req('/api/delete-requests',sup)).json()).requests.some(r=>r.id===pend.id&&r.requestedBy==='yonetici.bir'));
+ // karar yetkisi yalniz Super-yoneticide; kendi talebini onaylayamaz
+ assert.equal((await decide(yon,{op:'approve',id:pend.id})).status,403);
+ assert.equal((await decide(ekip,{op:'approve',id:pend.id})).status,403);
+ assert.equal((await decide(sup,{op:'approve',id:'yok'})).status,404);
+ assert.equal((await decide(sup,{op:'bogus',id:pend.id})).status,400);
+ // Super-yonetici reddeder: hicbir sey silinmez, karar kalici
+ assert.equal((await decide(sup,{op:'reject',id:pend.id,note:'Once sube ile teyit edin'})).status,200);
+ assert.equal((await rowsNow()).rows.length,base.rows.length);
+ assert.equal((await decide(sup,{op:'approve',id:pend.id})).status,409);
+ // Yonetici bekleyen talebini iptal eder
+ const p2=await (await delData(yon,{...range,reason:REASON+' (2)'})).json();
+ assert.equal((await decide(ekip,{op:'cancel',id:p2.id})).status,403);
+ assert.equal((await decide(yon,{op:'cancel',id:p2.id})).status,200);
+ assert.equal((await decide(sup,{op:'approve',id:p2.id})).status,409);
+ // Onaylanan talep silinir: once anlik goruntu, sonra silme
+ const p3=await (await delData(yon,{...range,reason:REASON+' (3)'})).json();
+ const snapTop=(await (await req('/api/snapshots',yon)).json()).snapshots[0].name;
+ const ap=await decide(sup,{op:'approve',id:p3.id,note:'Uygun'});assert.equal(ap.status,200);
+ assert.equal((await ap.json()).result.removed,dprev.removed);
  const afterDel=await rowsNow();
- assert.equal(afterDel.rows.length,beforeDel.rows.length-dres.removed);
+ assert.equal(afterDel.rows.length,base.rows.length-dprev.removed);
  assert.ok(!afterDel.rows.some(r=>r[6]>='2027-01-05'&&r[6]<='2027-01-06'&&r[0]==='Atv'));
  assert.ok(!afterDel.coverage.some(k=>k==='Atv|2027-01-05'||k==='Atv|2027-01-06'));
  const snapDel=(await (await req('/api/snapshots',yon)).json()).snapshots[0];
  assert.notEqual(snapDel.name,snapTop);assert.equal(snapDel.reason,'delete');
- assert.ok((await (await req('/api/audit?event=data-delete',sup)).json()).entries.some(e=>e.user==='yonetici.bir'&&e.detail.removed===dres.removed&&e.detail.channel==='Atv'));
- assert.equal((await (await delData(yon,{start:'2027-01-05',end:'2027-01-06',channel:'Atv'})).json()).removed,0); // ikinci silme bir sey silmez
- assert.equal((await (await req('/api/snapshots',yon)).json()).snapshots[0].name,snapDel.name); // ... ve yeni goruntu olusturmaz
- assert.equal((await post('/api/restore?name='+snapDel.name,yon,'{}')).status,200); // silme geri alinabilir
- assert.equal((await rowsNow()).rows.length,beforeDel.rows.length);
+ // denetim: kim, ne zaman, hangi gerekce, kim onayladi
+ const dAudit=(await (await req('/api/audit?limit=500',sup)).json()).entries;
+ assert.ok(dAudit.some(e=>e.event==='delete-request'&&e.user==='yonetici.bir'&&e.detail.reason===REASON));
+ assert.ok(dAudit.some(e=>e.event==='delete-reject'&&e.user==='super.bir'&&e.detail.note==='Once sube ile teyit edin'));
+ assert.ok(dAudit.some(e=>e.event==='delete-cancel'&&e.user==='yonetici.bir'));
+ assert.ok(dAudit.some(e=>e.event==='delete-approve'&&e.user==='super.bir'&&e.detail.requestedBy==='yonetici.bir'));
+ assert.ok(dAudit.some(e=>e.event==='data-delete'&&e.detail.requestId===p3.id&&e.detail.approvedBy==='super.bir'&&e.detail.requestedBy==='yonetici.bir'&&e.detail.reason===REASON+' (3)'));
+ // Yonetici geri yukleyemez (eski goruntuye donmek veri silebilir); Super-yonetici geri alabilir
+ assert.equal((await post('/api/restore?name='+snapDel.name,yon,'{}')).status,403);
+ assert.equal((await post('/api/restore?name='+snapDel.name,sup,'{}')).status,200);
+ assert.equal((await rowsNow()).rows.length,base.rows.length);
+ // Super-yonetici dogrudan siler (gerekce yine zorunlu); kayit otomatik onayli olarak tutulur
+ assert.equal((await delData(sup,range)).status,400);
+ const direct=await (await delData(sup,{...range,reason:REASON+' (dogrudan)'})).json();
+ assert.equal(direct.done,true);assert.equal(direct.removed,dprev.removed);
+ assert.ok((await (await req('/api/delete-requests',sup)).json()).requests.some(r=>r.id===direct.id&&r.status==='approved'&&r.auto===true&&r.decidedBy==='super.bir'));
+ assert.equal((await post('/api/restore?name='+(await (await req('/api/snapshots',sup)).json()).snapshots[0].name,sup,'{}')).status,200);
+ assert.equal((await rowsNow()).rows.length,base.rows.length);
+ // Eski kayit temizligi de ayni akistan gecer: Yonetici talep eder, Super-yonetici reddeder
+ assert.equal((await post('/api/prune?keep=30',yon,'{}')).status,400);
+ const pr=await (await post('/api/prune?keep=30',yon,JSON.stringify({reason:'Saklama suresini asan kayitlar temizlenecek'}))).json();
+ assert.equal(pr.pending,true);assert.ok(pr.removed>0);
+ assert.equal((await rowsNow()).rows.length,base.rows.length);
+ const prRec=(await (await req('/api/delete-requests',sup)).json()).requests.find(r=>r.id===pr.id);
+ assert.equal(prRec.kind,'prune');assert.equal(prRec.start,'1970-01-01');
+ assert.equal((await decide(sup,{op:'reject',id:pr.id})).status,200);
+ // Bekleyen talep siniri (kisi basina 5)
+ const ids=[];
+ for(let i=0;i<5;i++){const x=await delData(yon,{...range,reason:'Sinir testi talebi numara '+i});assert.equal(x.status,200);ids.push((await x.json()).id);}
+ assert.equal((await delData(yon,{...range,reason:'Sinir testi: altinci talep'})).status,409);
+ for(const id of ids) assert.equal((await decide(sup,{op:'cancel',id})).status,200); // Super-yonetici baskasinin talebini iptal edebilir
+ assert.equal((await (await req('/api/delete-requests',yon)).json()).pending,0);
+ // Talepler yeniden baslatmada korunur
+ const keepPending=await (await delData(yon,{...range,reason:'Yeniden baslatma testi icin bekleyen talep'})).json();
+ await stop();await start();
+ const afterRestart2=await (await req('/api/delete-requests',sup)).json();
+ assert.ok(afterRestart2.requests.some(r=>r.id===keepPending.id&&r.status==='pending'));
+ assert.ok(afterRestart2.requests.some(r=>r.id===pr.id&&r.status==='rejected'));
+ assert.equal((await decide(sup,{op:'cancel',id:keepPending.id})).status,200);
  if(process.env.TEST_ADEX_XLSX){
    const sample=await post('/api/import',admin,fs.readFileSync(process.env.TEST_ADEX_XLSX));
    assert.equal(sample.status,200,await sample.clone().text());
