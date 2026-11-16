@@ -18,15 +18,40 @@ const core = new vm.Script(fs.readFileSync(path.join(root,'core.js'),'utf8'));
 const { DEFAULT_RULES } = require('./public/core.js');
 const initial = {rows:[],coverage:[],verified:[],expectedChannels:[],rules:DEFAULT_RULES,updatedAt:null};
 let snapshot = fs.existsSync(stateFile) ? fs.readFileSync(stateFile) : gzipSync(JSON.stringify(initial));
-let state = JSON.parse(gunzipSync(snapshot));
-// Eski arsiv: global 'confirmed' bayragi kanal-gun bazli dogrulamaya cevrilir.
-if (!state.verified || !state.expectedChannels || 'confirmed' in state) {
-  state.verified = state.verified || (state.confirmed ? state.coverage.slice() : []);
-  state.expectedChannels = state.expectedChannels || [];
-  delete state.confirmed;
-  snapshot = gzipSync(JSON.stringify(state));
+// Eski arsiv: global 'confirmed' bayragi kanal-gun bazli dogrulamaya cevrilir. Degistiyse true doner.
+function normalize(s) {
+  if (!s || !Array.isArray(s.rows) || !Array.isArray(s.coverage) || !s.rules || typeof s.rules !== 'object' || Array.isArray(s.rules)) throw bad('Gecersiz arsiv dosyasi.');
+  const changed = !s.verified || !s.expectedChannels || 'confirmed' in s;
+  s.verified = s.verified || (s.confirmed ? s.coverage.slice() : []);
+  s.expectedChannels = s.expectedChannels || [];
+  delete s.confirmed;
+  return changed;
 }
-function save(next) {
+function bad(message,status=400) {return Object.assign(new Error(message),{status});}
+let state = JSON.parse(gunzipSync(snapshot));
+if (normalize(state)) snapshot = gzipSync(JSON.stringify(state));
+// Anlik goruntuler: her veri degisikliginden once mevcut arsivin kopyasi alinir; son SNAPSHOT_KEEP adedi saklanir.
+const snapDir = path.join(dir,'snapshots');
+fs.mkdirSync(snapDir,{recursive:true});
+const snapKeep = Math.max(1,Number(env.SNAPSHOT_KEEP)||14);
+const snapName = /^\d{8}T\d{9}Z-[a-z-]+\.json\.gz$/;
+function listSnapshots() {
+  return fs.readdirSync(snapDir).filter(n=>snapName.test(n)).sort().reverse().map(name=>{
+    const st = fs.statSync(path.join(snapDir,name));
+    return {name,size:st.size,createdAt:st.mtime.toISOString(),reason:name.slice(name.indexOf('Z-')+2,-8)};
+  });
+}
+function takeSnapshot(reason) {
+  if (!fs.existsSync(stateFile)) return; // henuz kaydedilmis arsiv yok
+  const name = new Date().toISOString().replace(/[-:.]/g,'')+'-'+reason+'.json.gz';
+  const file = path.join(snapDir,name), staged = file+'.tmp';
+  try { fs.writeFileSync(staged,snapshot,{mode:0o600}); fs.renameSync(staged,file); }
+  finally { fs.rmSync(staged,{force:true}); }
+  for (const old of listSnapshots().slice(snapKeep)) fs.rmSync(path.join(snapDir,old.name),{force:true});
+}
+// reason verilirse yazmadan once anlik goruntu alinir; goruntu alinamazsa islem iptal edilir.
+function save(next,reason) {
+  if (reason) takeSnapshot(reason);
   const staged = stateFile+'.'+randomUUID()+'.tmp';
   const zipped = gzipSync(JSON.stringify(next));
   try { fs.writeFileSync(staged,zipped,{mode:0o600}); fs.renameSync(staged,stateFile); }
@@ -49,7 +74,6 @@ function send(res,code,data) {
   res.writeHead(code,{'Content-Type':'application/json; charset=utf-8'});
   res.end(JSON.stringify(data));
 }
-function bad(message,status=400) {return Object.assign(new Error(message),{status});}
 async function read(req,max) {
   if (Number(req.headers['content-length'])>max) {req.resume();throw bad('Dosya boyutu siniri asildi.',413);}
   const chunks=[];
@@ -97,14 +121,27 @@ http.createServer(async(req,res)=>{
       res.writeHead(200,{'Content-Type':name.endsWith('.html')?'text/html; charset=utf-8':'application/javascript; charset=utf-8'});
       return res.end(fs.readFileSync(path.join(root,name)));
     }
+    if(route==='/api/snapshots'&&method==='GET') {
+      if(access!=='admin') return send(res,403,{error:'Yonetici yetkisi gerekli.'});
+      return send(res,200,{keep:snapKeep,snapshots:listSnapshots()});
+    }
     if(route==='/api/session'&&method==='GET') return send(res,200,{admin:access==='admin'});
     if(route==='/api/state'&&method==='GET') {
       res.writeHead(200,{'Content-Type':'application/json','Content-Encoding':'gzip'});
       return res.end(snapshot);
     }
-    if(method==='POST'&&['/api/import','/api/rules'].includes(route)) {
+    if(method==='POST'&&['/api/import','/api/rules','/api/restore'].includes(route)) {
       if(!machine&&(access!=='admin'||req.headers['x-panel-request']!=='1'))
         return send(res,403,{error:'Yonetici yetkisi gerekli.'});
+      if(route==='/api/restore') {
+        const name=url.searchParams.get('name')||'';
+        if(!snapName.test(name)||!listSnapshots().some(s=>s.name===name)) throw bad('Anlik goruntu bulunamadi.',404);
+        let restored;
+        try {restored=JSON.parse(gunzipSync(fs.readFileSync(path.join(snapDir,name))));} catch {throw bad('Anlik goruntu okunamadi.');}
+        normalize(restored);
+        save(restored,'restore');
+        return send(res,200,{ok:true,total:restored.rows.length});
+      }
       if(route==='/api/import') {
         const mode=machine?'replace':(url.searchParams.get('mode')||'append');
         const start=url.searchParams.get('start')||'',end=url.searchParams.get('end')||'';
@@ -112,7 +149,7 @@ http.createServer(async(req,res)=>{
         const body=await read(req,35*1024*1024);
         if(body.length<4||body.readUInt32LE(0)!==0x04034b50) throw bad('Gecerli bir XLSX dosyasi secin.');
         const m=parseImport(body,{mode,start,end,requireDays:machine,expected:machine?state.expectedChannels:[],complete:!machine&&url.searchParams.get('complete')==='1'});
-        save({...state,rows:m.rows,coverage:m.coverage,verified:m.verified,updatedAt:new Date().toISOString()});
+        save({...state,rows:m.rows,coverage:m.coverage,verified:m.verified,updatedAt:new Date().toISOString()},machine?'import-auto':'import-'+mode);
         return send(res,200,{added:m.added,updated:m.updated,skipped:m.skipped,total:m.rows.length,missingChannels:m.missingChannels});
       }
       const raw=await read(req,512*1024);

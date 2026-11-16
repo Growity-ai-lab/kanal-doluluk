@@ -6,7 +6,7 @@ const {spawn}=require('node:child_process');
 const {once}=require('node:events');
 const XLSX=require('../public/xlsx.full.min.js');
 const data=fs.mkdtempSync(path.join(os.tmpdir(),'kanal-test-'));
-const env={...process.env,PORT:'18357',DATA_DIR:data,ADMIN_PASSWORD:'test-admin-01234567890',TEAM_PASSWORD:'test-viewer-01234567890',INGEST_TOKEN:'test-ingest-01234567890'};
+const env={...process.env,PORT:'18357',DATA_DIR:data,ADMIN_PASSWORD:'test-admin-01234567890',TEAM_PASSWORD:'test-viewer-01234567890',INGEST_TOKEN:'test-ingest-01234567890',SNAPSHOT_KEEP:'3'};
 const basic=(u,p)=>'Basic '+Buffer.from(u+':'+p).toString('base64');
 const admin=basic('admin',env.ADMIN_PASSWORD),viewer=basic('time',env.TEAM_PASSWORD),bot='Bearer '+env.INGEST_TOKEN;
 const req=(p,auth,options={})=>fetch('http://localhost:18357'+p,{...options,headers:{...options.headers,...(auth?{Authorization:auth}:{})}});
@@ -73,6 +73,23 @@ const post=(p,auth,body,header=true)=>req(p,auth,{method:'POST',body,headers:hea
  response=await post('/api/import?mode=replace&start=2026-11-12&end=2026-11-12&complete=0',admin,book(['2026-11-12'],30));
  assert.equal(response.status,200,await response.clone().text());
  assert.ok(!(await (await req('/api/state',viewer)).json()).verified.includes('Atv|2026-11-12'));
+ // Anlik goruntuler: yalniz admin gorur, son SNAPSHOT_KEEP adet saklanir, geri yuklenebilir
+ assert.equal((await req('/api/snapshots',viewer)).status,403);
+ let snaps=(await (await req('/api/snapshots',admin)).json()).snapshots;
+ assert.equal(snaps.length,3);
+ const oldest=snaps[snaps.length-1];
+ const onDisk=JSON.parse(require('node:zlib').gunzipSync(fs.readFileSync(path.join(data,'snapshots',oldest.name))));
+ assert.equal((await post('/api/restore?name='+oldest.name,viewer,'')).status,403);
+ assert.equal((await post('/api/restore?name=../archive.json.gz',admin,'')).status,404);
+ assert.equal((await post('/api/restore?name=20200101T000000000Z-import-append.json.gz',admin,'')).status,404);
+ assert.equal((await post('/api/restore?name='+oldest.name,admin,'')).status,200);
+ const restoredState=await (await req('/api/state',viewer)).json();
+ assert.equal(restoredState.rows.length,onDisk.rows.length);
+ assert.equal((await (await req('/api/snapshots',admin)).json()).snapshots[0].reason,'restore');
+ // Basarisiz iceri aktarma anlik goruntu olusturmaz
+ const before=(await (await req('/api/snapshots',admin)).json()).snapshots[0].name;
+ assert.equal((await post('/api/import?mode=bogus',admin,one)).status,400);
+ assert.equal((await (await req('/api/snapshots',admin)).json()).snapshots[0].name,before);
  if(process.env.TEST_ADEX_XLSX){
    const sample=await post('/api/import',admin,fs.readFileSync(process.env.TEST_ADEX_XLSX));
    assert.equal(sample.status,200,await sample.clone().text());
