@@ -8,8 +8,8 @@ Uygulamanın tamamı Render'da çalışır: tek bir Node web servisi ve kalıcı
 
 1. **Depo:** Kod bu GitHub deposundadır (Private). Render'ın dağıtacağı dal, uygulamanın bu sürümünü içermelidir. ADEX dosyalarını, şifreleri ve anahtarları depoya koyma; `.gitignore` `*.xlsx` ve `.env`'i dışlar.
 2. **Blueprint:** Render Dashboard → **New → Blueprint** → bu depoyu bağla ve dalı seç. `render.yaml` şunları kurar: Node 24, **Pro** plan web servisi, 1 GB kalıcı disk, sağlık kontrolü (`/healthz`) ve ayarlar (`NODE_OPTIONS`, `RETENTION_DAYS`, `SNAPSHOT_KEEP`). Mevcut bir servisi bağlıyorsan planın ve ortam değişkenlerinin Blueprint ile eşleştiğini kontrol et. Ekrandaki güncel bedeli onaylamadan önce oku.
-3. **Gizli değerler:** Render sorduğunda iki farklı, rastgele, en az 20 karakterli değer gir: `ADMIN_PASSWORD` (acil durum yönetici hesabı) ve `INGEST_TOKEN` (Windows otomatik aktarımı). Bunları depoya yazma; yalnızca Render'da dururlar.
-4. **İlk giriş:** Dağıtım bitince `https://<servis-adı>.onrender.com/login` adresini aç. Kullanıcı adı **admin**, şifre `ADMIN_PASSWORD`. Hemen **Kullanıcılar** ekranından her kişi için ayrı hesap aç ve günlük kullanımı onlara bırak.
+3. **Gizli değerler:** Render sorduğunda iki farklı, rastgele, en az 20 karakterli değer gir: `ADMIN_PASSWORD` (acil durum süper-yönetici hesabı) ve `INGEST_TOKEN` (Windows otomatik aktarımı). Bunları depoya yazma; yalnızca Render'da dururlar.
+4. **İlk giriş:** Dağıtım bitince `https://<servis-adı>.onrender.com/login` adresini aç. Kullanıcı adı **admin**, şifre `ADMIN_PASSWORD` (süper-yönetici). Hemen **Kullanıcılar** ekranından her kişi için ayrı hesap aç ve günlük kullanımı onlara bırak; rolleri aşağıdaki tabloya göre ver.
 5. **Ayarlar:** Ayarlar ekranındaki *Beklenen kanallar* alanını doldur (örnek yazı alanın içindedir).
 6. **İlk veri:** Yetkili bir ADEX dışa aktarımını **Veri yükle** ile yükle; geçmişi yüklemek için ADEX kaynak Excel'lerini kullan (en fazla `RETENTION_DAYS` günlük). Eski sistemin verisi kendiliğinden taşınmaz. Aynı aralığı masaüstü ve webde açıp kanal, spot kapsamı ve doluluk sonuçlarını karşılaştır.
 7. **Otomatik aktarım:** Aşağıdaki Windows bölümüne bak. Özel alan adı kullanırsan `windows/Render-Gonder.ps1` yalnızca `*.onrender.com` adreslerini kabul ettiği için betikteki adres denetimini bilinçli olarak güncelle.
@@ -51,11 +51,23 @@ Eski sürüm (React/Vite) Vercel'de, verisi Supabase'te çalışıyordu. Yeni s�
 
 ## Kullanıcılar, oturum ve denetim kaydı
 
-- **Hesaplar:** Kişi başına kullanıcı adı ve şifre. Şifreler `scrypt` ile özetlenip `DATA_DIR/users.json` içinde tutulur (en az 12 karakter). Yönetici kullanıcı ekler, şifre sıfırlar, rol değiştirir, hesabı kapatır; herkes kendi şifresini **Şifre** düğmesinden değiştirir. Kendi rolünü veya hesabını değiştirmek engellidir.
-- **`admin` hesabı:** `ADMIN_PASSWORD` ile girilen acil durum hesabıdır; şifresi yalnızca Render ortam değişkeninden değişir. Yöneticilerin hepsi hesabını kaybederse buradan toparlanır.
+**Roller** (her rol bir altındakinin yetkilerini içerir)
+
+| Yetki | Ekip | Yönetici | Süper-yönetici |
+|---|:-:|:-:|:-:|
+| Verileri görüntüler, filtreler, Excel çıktısı alır | ✓ | ✓ | ✓ |
+| Excel yükler, dönemi yeniler, eski kayıtları temizler (siler) | | ✓ | ✓ |
+| Hesaplama kuralları, beklenen kanallar, anlık görüntüler ve geri yükleme | | ✓ | ✓ |
+| Kullanıcı ekler, siler, rol ve şifre değiştirir, hesabı kapatır | | | ✓ |
+| Denetim kaydını görür | | | ✓ |
+
+Yetkisiz bir isteğin kendisi de denetim kaydına (`denetim: yetkisiz deneme`) yazılır. Otomatik aktarım (`INGEST_TOKEN`) ayrı bir makine kimliğidir ve yalnızca veri yükleyebilir.
+
+- **Hesaplar:** Kişi başına kullanıcı adı ve şifre. Şifreler `scrypt` ile özetlenip `DATA_DIR/users.json` içinde tutulur (en az 12 karakter). Süper-yönetici kullanıcı ekler, siler, şifre sıfırlar, rol değiştirir ve hesabı kapatır; herkes kendi şifresini **Şifre** düğmesinden değiştirir. Kendi rolünü, hesabını veya kaydını değiştirmek/silmek engellidir. Silinen kullanıcının açık oturumları hemen düşer; geçmiş işlemleri denetim kaydında kalır.
+- **`admin` hesabı:** `ADMIN_PASSWORD` ile girilen acil durum **süper-yönetici** hesabıdır; şifresi yalnızca Render ortam değişkeninden değişir ve silinemez. Süper-yöneticilerin hepsi hesabını kaybederse buradan toparlanır.
 - **Oturum:** İmzalı, `HttpOnly` ve `SameSite=Strict` çerez, 12 saat. İmza anahtarı `DATA_DIR/session.key` dosyasındadır, yeniden dağıtımda oturumlar sürer. Şifre değişince veya hesap kapanınca o kişinin açık oturumları geçersiz olur. Çıkış, çerezi siler.
 - **Deneme sınırı:** Aynı kullanıcı adına `LOGIN_MAX_FAILS` (varsayılan 8) başarısız denemeden sonra, aynı IP'den bunun üç katı denemeden sonra 15 dakika giriş kilitlenir. Sayaçlar bellekte tutulur, yeniden başlatmada sıfırlanır.
-- **Denetim kaydı:** `DATA_DIR/audit.log` (JSON satırları, 5 MB'ta döner, 10 dosya). Kaydedilenler: giriş, başarısız giriş, çıkış, şifre değişikliği, kullanıcı işlemleri, veri yükleme (kim, mod, aralık, eklenen/güncellenen kayıt), reddedilen yükleme, geri yükleme, kural değişikliği, **Excel çıktısı** (kim, aralık, filtreler) ve yetkisiz deneme. Otomatik aktarım `ingest` adıyla görünür. Şifre ve anahtarlar kayda yazılmaz. Yönetici kaydı **Kullanıcılar** ekranından görür. Excel çıktısı kaydı tarayıcıdan bildirildiği için bir kullanıcı bunu atlatabilir; veriyi kaydın dışında almasını engellemez (bkz. aşağıdaki ham veri notu).
+- **Denetim kaydı:** `DATA_DIR/audit.log` (JSON satırları, 5 MB'ta döner, 10 dosya). Kaydedilenler: giriş, başarısız giriş, çıkış, şifre değişikliği, kullanıcı işlemleri, veri yükleme (kim, mod, aralık, eklenen/güncellenen kayıt), reddedilen yükleme, geri yükleme, kural değişikliği, **Excel çıktısı** (kim, aralık, filtreler) ve yetkisiz deneme. Otomatik aktarım `ingest` adıyla görünür. Şifre ve anahtarlar kayda yazılmaz. Süper-yönetici kaydı **Kullanıcılar** ekranından görür. Excel çıktısı kaydı tarayıcıdan bildirildiği için bir kullanıcı bunu atlatabilir; veriyi kaydın dışında almasını engellemez (bkz. aşağıdaki ham veri notu).
 - **Yedek:** `users.json`, `session.key` ve `audit.log` anlık görüntülere dahil değildir; Render disk anlık görüntüsü bunları da kapsar.
 
 ## Güvenlik başlıkları (CSP)

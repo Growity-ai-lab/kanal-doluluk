@@ -70,12 +70,13 @@ const header = (r, h) => r.headers.get(h) || '';
       r = await get('/api/state', H);
       const st = await r.json();
       ok('Arsiv okunuyor', r.status === 200 && Array.isArray(st.rows), st.rows ? st.rows.length.toLocaleString('tr-TR') + ' kayit, ' + (st.coverage || []).length + ' kanal-gun' + (st.updatedAt ? ', son yukleme ' + st.updatedAt : ', henuz veri yuklenmemis') : '');
-      if (ses.role === 'admin') {
-        r = await get('/api/snapshots', H); const sn = await r.json(); ok('Anlik goruntu listesi (yonetici)', r.status === 200, (sn.snapshots || []).length + ' kopya, saklama ' + sn.keep);
-        r = await get('/api/users', H); const us = await r.json(); ok('Kullanici listesi (yonetici)', r.status === 200, (us.users || []).length + ' kisi hesabi');
-        r = await get('/api/audit?limit=5', H); const au = await r.json(); ok('Denetim kaydi (yonetici)', r.status === 200, (au.entries || []).length + ' son kayit');
+      if (ses.admin) { r = await get('/api/snapshots', H); const sn = await r.json(); ok('Anlik goruntu listesi (yonetici ve ustu)', r.status === 200, (sn.snapshots || []).length + ' kopya, saklama ' + sn.keep); }
+      else { r = await get('/api/snapshots', H); ok('Ekip kullanicisi anlik goruntulere giremez', r.status === 403, 'HTTP ' + r.status); }
+      if (ses.superadmin) {
+        r = await get('/api/users', H); const us = await r.json(); ok('Kullanici listesi (super-yonetici)', r.status === 200, (us.users || []).length + ' kisi hesabi');
+        r = await get('/api/audit?limit=5', H); const au = await r.json(); ok('Denetim kaydi (super-yonetici)', r.status === 200, (au.entries || []).length + ' son kayit');
       } else {
-        r = await get('/api/users', H); ok('Ekip kullanicisi yonetici uclarina giremez', r.status === 403, 'HTTP ' + r.status);
+        r = await get('/api/users', H); ok('Kullanici yonetimi yalniz super-yoneticiye acik', r.status === 403, 'HTTP ' + r.status);
       }
       await get('/api/logout', { method: 'POST', headers: { Cookie: cookie, 'X-Panel-Request': '1' } });
     }
