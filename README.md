@@ -10,6 +10,13 @@ Mevcut web panelinin ortak arşivli sürümü. Filtreler, kanal/reklamveren/mark
 4. Giriş sayfasından kullanıcı adı **admin** ve `ADMIN_PASSWORD` ile gir. Bu acil durum hesabıdır; hemen **Kullanıcılar** ekranından her kişi için ayrı hesap aç (yönetici veya ekip rolü) ve günlük kullanımı kişi hesaplarına bırak. Yönetici veri yükler, kuralları, kullanıcıları ve denetim kaydını yönetir; ekip filtreler ve Excel çıktısı alır.
 5. Önce yetkili bir ADEX dışa aktarımıyla paneli dene. Eski masaüstü veritabanı kendiliğinden taşınmaz; geçmişi yüklemek için ADEX kaynak Excel'lerini kullan. Aynı aralığı masaüstü ve webde açıp kanal, spot kapsamı ve doluluk sonuçlarını karşılaştır. Arayüz ve hesap kodu eldeki web sürümüne dayanır; Windows hesaplarıyla birebir sonuç doğrulanmamıştır.
 
+## ADEX dosya biçimi (gerçek bir 10 Kasım dosyasıyla doğrulandı)
+
+- **Başlıklar:** `MEDYA`, `Y.ANA SEKTÖR`, `Y.SEKTÖR`, `REKLAMIN FİRMASI`, `ÜRÜN TÜRÜ`, `MARKA`, `TARİH`, `SPOT TİPİ`, `SPOT TİPİ D.`, `BAŞLANGIÇ`, `BİTİŞ` zorunludur; `SÜRE` (saniye) varsa o esas alınır. `ADET`, `G.R.P…` gibi diğer sütunlar yok sayılır.
+- **Tarih** `10.11.2026` biçiminde metindir. **Saatler** günün kesri olarak gelir; yayın günü 02:00'da başlayıp 26:00'da biter ve gece yarısından sonrası 1'in üzerinde bir değerdir (örn. 25:57 → 1,0817). Ayrıştırıcı bunu doğru okur.
+- **Süre:** Bu dosyada `BİTİŞ`, spotun son saniyesini içerir; yani `BİTİŞ − BAŞLANGIÇ` her satırda `SÜRE`'den 1 sn kısadır. Hesap `SÜRE` sütununu kullanır. `SÜRE` olmayan eski dosyalarda bitiş−başlangıç kullanılır ve spot başına 1 sn eksik kalır.
+- **Kanal adları** sayı (`360`) veya virgül (`Tv8,5`) içerebilir. Ayarlardaki *Beklenen kanallar* alanı bu yüzden noktalı virgülle ayrılır.
+
 ## Kullanıcılar, oturum ve denetim kaydı
 
 - **Hesaplar:** Kişi başına kullanıcı adı ve şifre. Şifreler `scrypt` ile özetlenip `DATA_DIR/users.json` içinde tutulur (en az 12 karakter). Yönetici kullanıcı ekler, şifre sıfırlar, rol değiştirir, hesabı kapatır; herkes kendi şifresini **Şifre** düğmesinden değiştirir. Kendi rolünü veya hesabını değiştirmek engellidir.

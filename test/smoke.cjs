@@ -98,18 +98,18 @@ const post=(p,auth,body,header=true)=>req(p,auth,{method:'POST',body,headers:hea
  response=await post('/api/import?mode=append&start=&end=&complete=0',admin,book(['2026-11-12'],30));
  assert.equal(response.status,200,await response.clone().text());
  assert.equal((await post('/api/import?mode=merge',admin,one)).status,400);
- assert.equal((await post('/api/rules',admin,JSON.stringify({rules:{'Normal Spot|Kusak Spot':'include'},expectedChannels:['Atv','Kanal D']}))).status,200);
+ assert.equal((await post('/api/rules',admin,JSON.stringify({rules:{'Normal Spot|Kusak Spot':'include'},expectedChannels:['Atv','Kanal D','Tv8,5']}))).status,200);
  assert.equal((await post('/api/rules',admin,JSON.stringify({rules:{'Normal Spot|Kusak Spot':'include'},confirmed:true}))).status,400);
  // Beklenen kanal dosyada yoksa uyari doner
  response=await post(url,bot,book(weekend,45),false);
- assert.deepEqual((await response.json()).missingChannels,['Kanal D']);
+ assert.deepEqual((await response.json()).missingChannels,['Kanal D','Tv8,5']); // kanal adinda virgul olabilir
  await stop();await start();
  assert.equal((await req('/api/session',viewer)).status,200); // oturum yeniden baslatmadan sonra da gecerli
  const state=await (await req('/api/state',viewer)).json();
  assert.equal(state.rows.length,4);
  assert.deepEqual(state.rows.map(r=>r[11]),[30,45,45,45]);
  assert.equal(state.confirmed,undefined);
- assert.deepEqual(state.expectedChannels,['Atv','Kanal D']);
+ assert.deepEqual(state.expectedChannels,['Atv','Kanal D','Tv8,5']);
  // Otomatik aktarim kanal-gun bazinda dogrular; panelden 'eksiksiz' isaretsiz eklenen gun dogrulanmaz
  assert.deepEqual([...state.verified].sort(),weekend.map(d=>'Atv|'+d));
  assert.ok(state.coverage.includes('Atv|2026-11-12'));
