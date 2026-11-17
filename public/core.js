@@ -51,9 +51,13 @@ function resolveCompare(start,end,mode,custom){custom=custom||{};if(!mode)return
  if(mode==='month'){let pe=addMonths(end,-1),full=isMonthStart(start)&&isMonthEnd(end);return {start:addMonths(start,-1),end:full?pe.slice(0,8)+String(monthEnd(+pe.slice(0,4),+pe.slice(5,7))).padStart(2,'0'):pe,kind:'month'};}
  if(mode==='custom'){if(!custom.start)return null;let e=custom.end||addDays(custom.start,n-1);return e<custom.start?null:{start:custom.start,end:e,kind:'custom'};}
  return null;}
+// Gorunen tarih etiketleri: yil yok, gun-ay ('16 Kas'). Hafta: '09–15 Kas' / '30 Eki–05 Kas'; ay: 'Kasım'.
+const MON_SHORT=['Oca','Şub','Mar','Nis','May','Haz','Tem','Ağu','Eyl','Eki','Kas','Ara'],MON_LONG=['Ocak','Şubat','Mart','Nisan','Mayıs','Haziran','Temmuz','Ağustos','Eylül','Ekim','Kasım','Aralık'];
+function dayMonth(d){return d?d.slice(8,10)+' '+MON_SHORT[+d.slice(5,7)-1]:'';}
+function periodLabel(name,g){if(g==='month')return MON_LONG[+name.slice(5,7)-1];if(g==='week'){let e=addDays(name,6);return name.slice(5,7)===e.slice(5,7)?name.slice(8,10)+'–'+dayMonth(e):dayMonth(name)+'–'+dayMonth(e);}return dayMonth(name);}
 // Hizli donemler; last = analiz icin tamamlanmis son gun (dun). Hafta Pazartesi-Pazar.
 function presetRange(name,last){let wd=weekdayMon0(last),m1=last.slice(0,8)+'01';
  switch(name){case 'yesterday':return [last,last];case 'last7':return [addDays(last,-6),last];case 'last30':return [addDays(last,-29),last];
   case 'thisWeek':return [addDays(last,-wd),last];case 'prevWeek':{let ms=addDays(last,-wd-7);return [ms,addDays(ms,6)];}
   case 'thisMonth':return [m1,last];case 'prevMonth':return [addMonths(m1,-1),addDays(m1,-1)];}return null;}
-if(typeof module!=='undefined')module.exports={DEFAULT_RULES,MAIN,orderChannels,analyze,period,timePart,datesBetween,addDays,daysBetween,addMonths,resolveCompare,presetRange};
+if(typeof module!=='undefined')module.exports={DEFAULT_RULES,MAIN,orderChannels,analyze,period,timePart,datesBetween,addDays,daysBetween,addMonths,resolveCompare,presetRange,dayMonth,periodLabel};
