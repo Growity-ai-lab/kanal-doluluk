@@ -14,7 +14,7 @@ if (secrets.some(s => !s || s.length < 20) || new Set(secrets).size !== 2)
 const dir = path.resolve(env.DATA_DIR || './data');
 fs.mkdirSync(dir,{recursive:true});
 const { createAuth, RANK } = require('./lib/auth.cjs');
-const auth = createAuth({dir,adminPassword:secrets[0],maxFails:Number(env.LOGIN_MAX_FAILS)||8});
+const auth = createAuth({dir,adminPassword:secrets[0],adminEmail:env.ADMIN_EMAIL||'',maxFails:Number(env.LOGIN_MAX_FAILS)||8});
 // E-posta bildirimi (SMTP_HOST/SMTP_PORT/SMTP_USER/SMTP_PASSWORD/MAIL_FROM tanimliysa acik). Gonderim hatalari istegi bozmaz; denetim kaydina yazilir.
 const { createMailer } = require('./lib/mail.cjs');
 const mail = createMailer(env,{onError:(e,kind)=>auth.audit('mail-failed',{user:'sistem'},{kind,error:String(e.message).slice(0,200)})});

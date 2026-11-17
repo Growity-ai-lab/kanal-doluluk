@@ -133,6 +133,7 @@ Sunucu, sağlayıcıdan bağımsız SMTP ile e-posta gönderir (ek paket gerekme
 
 | Ortam değişkeni | Anlamı |
 |---|---|
+| `ADMIN_EMAIL` | (isteğe bağlı) acil durum `admin` hesabının bildirim adresi; bu adrese de Süper-yönetici bildirimleri ve özet denemeleri gider |
 | `SMTP_HOST` | SMTP sunucusu (örn. `smtp.gmail.com`) |
 | `SMTP_PORT` | `465` (doğrudan TLS, varsayılan) veya `587` (STARTTLS). `SMTP_SECURE=true/false` ile değiştirilir |
 | `SMTP_USER`, `SMTP_PASSWORD` | Gönderen posta kutusunun kullanıcı adı ve şifresi (uygulama şifresi / API anahtarı) |

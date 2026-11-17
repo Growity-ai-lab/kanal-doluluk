@@ -22,6 +22,14 @@ const PORT = 18360, base = 'http://localhost:' + PORT;
   assert.deepEqual([t.date, t.dow, t.minutes, t.yesterday], ['2027-05-10', 1, 630, '2027-05-09']);
   const late = istanbulNow(new Date('2027-05-09T21:30:00Z'));                      // Istanbul'da ertesi gun 00:30 (Pazartesi)
   assert.deepEqual([late.date, late.dow, late.minutes], ['2027-05-10', 1, 30]);
+  { // ADMIN_EMAIL: acil durum hesabinin bildirim adresi
+    const d = fs.mkdtempSync(path.join(os.tmpdir(), 'ozet-auth-'));
+    const au = createAuth({ dir: d, adminPassword: 'a'.repeat(24), adminEmail: 'kurucu@example.com' });
+    assert.equal(au.emailFor('admin'), 'kurucu@example.com');assert.deepEqual(au.recipients(['superadmin']), ['kurucu@example.com']);
+    assert.deepEqual(au.recipients(['superadmin'], { exclude: 'admin' }), []);assert.deepEqual(au.recipients(['viewer']), []);
+    const nu = createAuth({ dir: fs.mkdtempSync(path.join(os.tmpdir(), 'ozet-auth-')), adminPassword: 'a'.repeat(24), adminEmail: 'gecersiz' });
+    assert.equal(nu.emailFor('admin'), '');
+  }
   { // donem secimi: Pazartesi = Cuma-Pazar (3 gun), diger gunler = dun; eksik gun uyarisi
     const r = (ch, d) => [ch, 'G', 'G', 'F', 'Ü', 'M', d, 'Normal Spot', 'Kusak Spot', 72000, 72300, 300, 0.1, 30];
     const days = ['2027-05-01', '2027-05-02', '2027-05-03', '2027-05-04', '2027-05-08', '2027-05-09', '2027-05-10'];
