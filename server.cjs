@@ -231,10 +231,10 @@ const CSP=["default-src 'none'","script-src 'self'","style-src 'self'","style-sr
 function date(s) {
   return /^\d{4}-\d{2}-\d{2}$/.test(s) && Number.isFinite(Date.parse(s)) && new Date(s).toISOString().slice(0,10)===s;
 }
-// ---- Gunluk ozet e-postasi: hafta ici 10:00 (Istanbul), e-postasi olan ve hesabi acik herkese. Ayni gun bir kez; sunucu kapaliysa 3 saat icinde yetisir.
+// ---- Gunluk ozet e-postasi: hafta ici 11:00 (Istanbul), e-postasi olan ve hesabi acik herkese. Ayni gun bir kez; sunucu kapaliysa 3 saat icinde yetisir.
 const { buildDailySummary, istanbulNow } = require('./lib/summary.cjs');
 const SUMMARY_DAYS = String(env.SUMMARY_DAYS||'1,2,3,4,5').split(',').map(Number).filter(n=>Number.isInteger(n)&&n>=0&&n<=6);
-const SUMMARY_TIME = /^([01]?\d|2[0-3]):([0-5]\d)$/.test(String(env.SUMMARY_TIME||'10:00')) ? String(env.SUMMARY_TIME||'10:00') : '10:00';
+const SUMMARY_TIME = /^([01]?\d|2[0-3]):([0-5]\d)$/.test(String(env.SUMMARY_TIME||'11:00')) ? String(env.SUMMARY_TIME||'11:00') : '11:00';
 const SUMMARY_MIN = Number(SUMMARY_TIME.split(':')[0])*60+Number(SUMMARY_TIME.split(':')[1]), SUMMARY_WINDOW = 180;
 const summaryFile = path.join(dir,'summary-state.json');
 let summaryState = {last:'',tries:{date:'',n:0,next:0}};
@@ -243,7 +243,7 @@ const saveSummaryState = () => { try { fs.writeFileSync(summaryFile,JSON.stringi
 const summaryNow = () => env.SUMMARY_NOW_OVERRIDE ? new Date(env.SUMMARY_NOW_OVERRIDE) : new Date();   // SUMMARY_NOW_OVERRIDE yalniz testler icindir
 const mailImages = [['kd-time','logo-time.png'],['kd-growity','logo-growity.png']].map(([cid,f])=>({cid,type:'image/png',data:fs.readFileSync(path.join(root,f))}));
 function summaryText(t) {
-  const s = buildDailySummary(state,{yesterday:t.yesterday,expectedChannels:state.expectedChannels,panelUrl:publicUrl});
+  const s = buildDailySummary(state,{yesterday:t.yesterday,start:t.start,expectedChannels:state.expectedChannels,panelUrl:publicUrl});
   return {...s,text:s.lines.join('\n')+(publicUrl?'\n\nPanel: '+publicUrl+'/':'')+'\n\nPowered by Growity AI Studio',images:mailImages};
 }
 async function sendDailySummary(t) {
