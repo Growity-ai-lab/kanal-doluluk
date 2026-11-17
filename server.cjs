@@ -230,14 +230,14 @@ try { summaryState = {...summaryState,...JSON.parse(fs.readFileSync(summaryFile,
 const saveSummaryState = () => { try { fs.writeFileSync(summaryFile,JSON.stringify(summaryState),{mode:0o600}); } catch(e) { console.error('summary state:',e.message); } };
 const summaryNow = () => env.SUMMARY_NOW_OVERRIDE ? new Date(env.SUMMARY_NOW_OVERRIDE) : new Date();   // SUMMARY_NOW_OVERRIDE yalniz testler icindir
 function summaryText(t) {
-  const s = buildDailySummary(state,{yesterday:t.yesterday,expectedChannels:state.expectedChannels});
+  const s = buildDailySummary(state,{yesterday:t.yesterday,expectedChannels:state.expectedChannels,panelUrl:publicUrl});
   return {...s,text:s.lines.join('\n')+(publicUrl?'\n\nPanel: '+publicUrl+'/':'')};
 }
 async function sendDailySummary(t) {
   const to = auth.recipients(['viewer','admin','superadmin']);
   if (!to.length) return {sent:0,recipients:0};
   const s = summaryText(t);
-  const r = await mail.notify('daily-summary',to,s.subject,s.text);
+  const r = await mail.notify('daily-summary',to,s.subject,s.text,s.html);
   return {...r,recipients:to.length,hasData:s.hasData};
 }
 let summaryBusy = false;
@@ -340,10 +340,16 @@ http.createServer(async(req,res)=>{
       const to=auth.emailFor(me.username);
       if(!to) throw bad(me.breakGlass?'Acil durum (admin) hesabinin e-posta adresi yoktur. Deneme icin kisi hesabinizla girin.':'Hesabiniza bir e-posta adresi ekleyin (Kullanicilar > E-posta); ozet oraya gider.');
       const s=summaryText(istanbulNow(summaryNow()));
-      try { await mail.sendNow(to,s.subject,s.text); }
+      try { await mail.sendNow(to,s.subject,s.text,s.html); }
       catch(err) { auth.audit('summary-test',ctx,{ok:false,error:String(err.message).slice(0,200)}); throw bad('E-posta gonderilemedi: '+String(err.message).slice(0,200),502); }
       auth.audit('summary-test',ctx,{ok:true,to});
       return send(res,200,{ok:true,to,day:s.day});
+    }
+    if(route==='/api/summary-preview'&&method==='GET') {
+      need(2);
+      const s=summaryText(istanbulNow(summaryNow()));
+      res.writeHead(200,{'Content-Type':'text/html; charset=utf-8','Cache-Control':'no-store','X-Content-Type-Options':'nosniff','Content-Security-Policy':"default-src 'none'; style-src-attr 'unsafe-inline'; frame-ancestors 'none'"});
+      return res.end(s.html);
     }
     if(route==='/api/mail-test'&&method==='POST') {
       need(2); panel(req);

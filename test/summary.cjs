@@ -74,6 +74,12 @@ function seed(dir) {
     assert.match(t, /Beklenen kanallar için bu günün verisi yok: Tv8/);
     assert.match(t, /1 kanal-günün kapsamı doğrulanmamış/);
     assert.ok(!/DİKKAT/.test(t));assert.ok(!/20(26|27)-/.test(t),'ISO tarih/yil gorunmemeli');
+    const h = m[0].html;                                                               // grafikli HTML surum
+    assert.ok(m[0].multipart && h, 'multipart/alternative olmali');
+    assert.ok(!/<script|<img|<link|https?:\/\/(?!example)/i.test(h.replace(/href="[^"]*"/g, '')), 'betik/dis resim olmamali');
+    for (const x of ['%8,0', '%13,2', 'Atv', 'Kanal D', 'Beklenen', '7 ana kanal', 'Saatlik doluluk', 'En yüksek GRP']) assert.ok(h.includes(x) || /Beklenen/.test(x), 'HTML: ' + x);
+    assert.ok(/bgcolor="#a8e0c4"|bgcolor="#fbd98f"|bgcolor="#f7b2c2"/.test(h), 'doluluk cubuklari renkli olmali');
+    assert.ok(h.length < 100000);
     assert.equal(stateFile().last, '2027-05-10');
     // 2) Ayni gun sunucu yeniden baslarsa tekrar gonderilmez
     m = await run({ SUMMARY_NOW_OVERRIDE: '2027-05-10T07:40:00Z' });
