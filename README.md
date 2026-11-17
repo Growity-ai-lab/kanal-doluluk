@@ -189,7 +189,7 @@ Arşiv kendiliğinden silinmez; temizlik her zaman yöneticinin onayıyla yapıl
 | 730 gün | 2,55 milyon | 1,8 GB | 0,5 sn | 4,9 sn | 2,0 GB | 316 MB (45 MB gzip) |
 | 1095 gün | 3,83 milyon | 2,7 GB | — | 4,8 sn | 3,0 GB | 474 MB (67 MB gzip) |
 
-"Donma", aktarım sırasında diğer isteklerin (sayfa açma, filtreleme) beklediği en uzun süredir. Aylık dosyadaki süre XLSX'in ayrıştırılmasından gelir ve arşiv boyutundan bağımsızdır. Tekrar-kontrolü yalnızca gelen dosyanın günleri için yapılır, arşiv parça parça yazılır ve durum değiştiren işlemler (yükleme, kural, geri yükleme) sırayla çalışır. Bu iyileştirmeden önce 1 yıllık arşivde günlük aktarım 5,5 sn, aylık dosya 10,7 sn donduruyordu; tepe bellek 1,7–1,9 GB idi.
+"Donma", aktarım sırasında diğer isteklerin (sayfa açma, filtreleme, Render'ın sağlık kontrolü) beklediği en uzun süredir. XLSX ayrıştırması ayrı bir iş parçacığında yapılır; bu yüzden 130 bin satırlık (≈15 günlük, 23 MB) bir dosyada donma ≈0,5 sn'dir (iş parçacığı olmadan ≈6 sn idi ve yavaş bir CPU'da Render'ın sağlık kontrolünü aşıp servisi yeniden başlatabilirdi; yükleme o zaman "is not valid JSON" hatasıyla düşerdi). Tablodaki "aylık dosya" sütunu bu iyileştirmeden önceki ölçümdür. Dosyanın işlenmesi `PARSE_TIMEOUT_MS` (varsayılan 180 sn) ile sınırlıdır; bellek yetmezse yükleme, dosyayı daha kısa dönemlere bölmeyi öneren bir hata ile reddedilir. Tekrar-kontrolü yalnızca gelen dosyanın günleri için yapılır, arşiv parça parça yazılır ve durum değiştiren işlemler (yükleme, kural, geri yükleme) sırayla çalışır.
 
 Tarayıcı tarafı değişmedi: 1 yıllık arşivde tarayıcı yaklaşık 1,5 GB bellek kullanır ve her açılışta 22 MB iner.
 

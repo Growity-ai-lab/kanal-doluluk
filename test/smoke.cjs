@@ -466,6 +466,18 @@ const fake=createFakeSmtp();
  // sifre ve gizli bilgiler e-postada/denetimde gecmez
  assert.ok(!fake.mails.some(m=>m.text.includes(RP)||m.text.includes(env.INGEST_TOKEN)||m.text.includes(env.ADMIN_PASSWORD)));
  assert.ok(fake.auths.length>0&&fake.auths.every(a=>a.ok));
+ // Bozuk dosya: ayristirma is parcaciginda hataya donusur (JSON 400), sunucu ayakta kalir
+ const junk=Buffer.concat([Buffer.from([0x50,0x4b,3,4]),Buffer.from('bozuk icerik '.repeat(200))]);
+ const jr=await post(append,admin,junk);assert.equal(jr.status,400);assert.ok((await jr.json()).error);
+ assert.equal((await post('/api/import?start=2026-01-01&end=2026-01-02',bot,junk,false)).status,400);
+ assert.equal((await req('/healthz')).status,200);
+ // Ayristirma sirasinda sunucu diger isteklere yanit vermeye devam eder (buyuk dosya ana is parcacigini bloke etmez)
+ const stallBook=(()=>{const rows=[headers];for(let i=0;i<60000;i++)rows.push(['Atv','Gıda','Gıda','Firma '+(i%500),'Ürün','Marka '+(i%900),'2027-04-01','Normal Spot','Kusak Spot',String(7+Math.floor(i/3600)).padStart(2,'0')+':'+String(Math.floor(i%3600/60)).padStart(2,'0')+':'+String(i%60).padStart(2,'0'),String(7+Math.floor(i/3600)).padStart(2,'0')+':'+String(Math.floor(i%3600/60)).padStart(2,'0')+':'+String(i%60).padStart(2,'0'),5]);const w2=XLSX.utils.book_new();XLSX.utils.book_append_sheet(w2,XLSX.utils.aoa_to_sheet(rows));return XLSX.write(w2,{type:'buffer',bookType:'xlsx',compression:true});})();
+ let worst=0,probing=true;
+ const prober=(async()=>{while(probing){const t=Date.now();await req('/healthz');worst=Math.max(worst,Date.now()-t);await sleep(15);}})();
+ const bigRes=await post(append,admin,stallBook);probing=false;await prober;
+ assert.equal(bigRes.status,200,await bigRes.clone().text());
+ assert.ok(worst<2500,'ayristirma sirasinda saglik kontrolu '+worst+' ms bekledi');
  if(process.env.TEST_ADEX_XLSX){
    const sample=await post('/api/import',admin,fs.readFileSync(process.env.TEST_ADEX_XLSX));
    assert.equal(sample.status,200,await sample.clone().text());

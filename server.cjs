@@ -183,13 +183,28 @@ async function read(req,max) {
   if(oversized) throw bad('Dosya boyutu siniri asildi.',413);
   return Buffer.concat(chunks);
 }
-function parseImport(body,options) {
+// Ayristirma (agir kisim) ayri bir is parcaciginda; arsive birlestirme ana is parcaciginda ve kisadir.
+const { Worker } = require('node:worker_threads');
+const PARSE_TIMEOUT_MS = Number(env.PARSE_TIMEOUT_MS) || 180000;
+function parseInThread(body,options) {
+  return new Promise((resolve,reject)=>{
+    const thread = new Worker(path.join(__dirname,'lib','parse-thread.cjs'),{workerData:{body,options:{start:options.start,end:options.end,requireDays:options.requireDays}},resourceLimits:{maxOldGenerationSizeMb:1536}});
+    let settled=false;
+    const finish=(fn,v)=>{ if(settled) return; settled=true; clearTimeout(timer); thread.terminate(); fn(v); };
+    const timer=setTimeout(()=>finish(reject,bad('Dosya islenemedi: sure asildi. Dosyayi daha kisa donemlere bolup yukleyin.',408)),PARSE_TIMEOUT_MS);
+    thread.once('message',m=>m.error?finish(reject,bad(m.error)):finish(resolve,m.fresh));
+    thread.once('error',e=>{ console.error('parse thread:',e.message); finish(reject,bad(e.code==='ERR_WORKER_OUT_OF_MEMORY'?'Dosya islenemedi: bellek yetersiz. Dosyayi daha kisa donemlere bolup yukleyin.':'Dosya islenemedi.',e.code==='ERR_WORKER_OUT_OF_MEMORY'?413:400)); });
+    thread.once('exit',code=>finish(reject,bad('Dosya islenemedi (islem beklenmedik sekilde kapandi).',500)));
+  });
+}
+async function parseImport(body,options) {
+  const fresh = await parseInThread(body,options);
   let result;
   const ctx=vm.createContext({XLSX,onmessage:null,postMessage:m=>{result=m;}});
   core.runInContext(ctx);
   worker.runInContext(ctx);
   ctx.onmessage({data:{op:'init',rows:state.rows.slice(),coverage:state.coverage.slice(),verified:state.verified.slice()}});
-  ctx.onmessage({data:{op:'import',buffer:new Uint8Array(body),...options}});
+  ctx.onmessage({data:{op:'merge',fresh,...options}});
   if(result.error) throw bad(result.error);
   return result;
 }
@@ -407,7 +422,7 @@ http.createServer(async(req,res)=>{
         if(body.length<4||body.readUInt32LE(0)!==0x04034b50) throw bad('Gecerli bir XLSX dosyasi secin.');
         return await exclusive(async()=>{
           let m;
-          try {m=parseImport(body,{mode,start,end,requireDays:machine,expected:machine?state.expectedChannels:[],complete:!machine&&url.searchParams.get('complete')==='1'});}
+          try {m=await parseImport(body,{mode,start,end,requireDays:machine,expected:machine?state.expectedChannels:[],complete:!machine&&url.searchParams.get('complete')==='1'});}
           catch(err) {auth.audit('import-rejected',ctx,{mode,start,end,bytes:body.length,reason:String(err.message).slice(0,200)});if(machine)notify('import-rejected',supers(),'Otomatik veri aktarımı REDDEDİLDİ',['Windows otomatik aktarımı şu nedenle reddedildi:',String(err.message).slice(0,300),'','Aralık: '+start+' - '+end,'Arşive hiçbir şey yazılmadı. ADEX dosyasını ve betik günlüğünü kontrol edin.']);throw err;}
           await save({...state,rows:m.rows,coverage:m.coverage,verified:m.verified,updatedAt:new Date().toISOString(),updatedBy:who.username},machine?'import-auto':'import-'+mode);
           auth.audit('import',ctx,{mode,start,end,complete:!machine&&url.searchParams.get('complete')==='1',bytes:body.length,added:m.added,updated:m.updated,skipped:m.skipped,total:m.rows.length,missingChannels:m.missingChannels});
