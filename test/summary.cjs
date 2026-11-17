@@ -76,7 +76,9 @@ function seed(dir) {
     assert.ok(!/DİKKAT/.test(t));assert.ok(!/20(26|27)-/.test(t),'ISO tarih/yil gorunmemeli');
     const h = m[0].html;                                                               // grafikli HTML surum
     assert.ok(m[0].multipart && h, 'multipart/alternative olmali');
-    assert.ok(!/<script|<img|<link|https?:\/\/(?!example)/i.test(h.replace(/href="[^"]*"/g, '')), 'betik/dis resim olmamali');
+    assert.deepEqual(m[0].cids.sort(), ['kd-growity', 'kd-time']);assert.ok(/powered by/.test(h) && /Powered by Growity AI Studio/.test(m[0].text));
+    assert.ok(![...h.matchAll(/<img[^>]*src="([^"]*)"/g)].some(x => !x[1].startsWith('cid:')), 'yalniz gomulu (cid:) resim');
+    assert.ok(!/<script|<link|https?:\/\/(?!example)/i.test(h.replace(/href="[^"]*"/g, '')), 'betik/dis resim olmamali');
     for (const x of ['%8,0', '%13,2', 'Atv', 'Kanal D', 'Beklenen', '7 ana kanal', 'Saatlik doluluk', 'En yüksek GRP']) assert.ok(h.includes(x) || /Beklenen/.test(x), 'HTML: ' + x);
     assert.ok(/bgcolor="#a8e0c4"|bgcolor="#fbd98f"|bgcolor="#f7b2c2"/.test(h), 'doluluk cubuklari renkli olmali');
     assert.ok(h.length < 100000);

@@ -24,3 +24,5 @@ textarea{resize:vertical;font:inherit;min-height:70px}.badge{display:inline-bloc
 #matrix th:first-child,#hourTable th:first-child{text-align:left}
 #matrix td.matrix-label,#hourTable td.matrix-label{font-weight:700;color:#162642;background:#fff;border-radius:5px}
 #matrix tbody tr:nth-child(even) td.matrix-label,#hourTable tbody tr:nth-child(even) td.matrix-label{background:#f5f8fe}
+
+header .brand{display:flex;align-items:center;gap:18px}.logo{height:40px;width:auto;display:block}.poweredby{display:flex;align-items:center;justify-content:center;gap:10px;margin:8px 0 28px;font-size:12px;color:var(--muted)}.poweredby img{height:16px;width:auto;display:block}@media(max-width:850px){header .brand{flex-direction:column;align-items:flex-start;gap:10px}}

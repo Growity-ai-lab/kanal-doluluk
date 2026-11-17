@@ -17,15 +17,17 @@ function createFakeSmtp(opts = {}) {
       const h = n => { const m = new RegExp('^' + n + ': (.*)$', 'mi').exec(unfolded); return m ? m[1] : ''; };
       const ct = h('Content-Type'), bm = /boundary="([^"]+)"/.exec(ct);
       const dec = b => Buffer.from(b.replace(/\r\n/g, ''), 'base64').toString('utf8');
-      let text = '', html = '';
-      if (bm) {   // multipart/alternative
-        for (const part of body.split('--' + bm[1]).slice(1)) {
+      let text = '', html = '';const cids = [];
+      const walk = (hdr, bdy) => {   // ic ice multipart (alternative > related) dahil
+        const m = /boundary="([^"]+)"/.exec(hdr);
+        if (!m) { if (/text\/html/i.test(hdr)) html = dec(bdy); else if (/image\//i.test(hdr)) { const c = /Content-ID: <([^>]+)>/i.exec(hdr); if (c) cids.push(c[1]); } else text = text || dec(bdy); return; }
+        for (const part of bdy.split('--' + m[1]).slice(1)) {
           if (part.startsWith('--')) break;
-          const [ph, ...pb] = part.replace(/^\r\n/, '').split('\r\n\r\n'), payload = pb.join('\r\n\r\n');
-          if (/text\/plain/i.test(ph)) text = dec(payload); else if (/text\/html/i.test(ph)) html = dec(payload);
+          const [ph, ...pb] = part.replace(/^\r\n/, '').split('\r\n\r\n'); walk(ph, pb.join('\r\n\r\n'));
         }
-      } else text = dec(body);
-      mails.push({ from, to: rcpt[0], subject: decodeWord(h('Subject')), text, html, multipart: !!bm, head, encrypted: !!sock.encrypted, headerNames: unfolded.split('\r\n').map(l => l.split(':')[0]) });
+      };
+      if (bm) walk(ct, body); else text = dec(body);
+      mails.push({ from, to: rcpt[0], subject: decodeWord(h('Subject')), text, html, cids, multipart: !!bm, head, encrypted: !!sock.encrypted, headerNames: unfolded.split('\r\n').map(l => l.split(':')[0]) });
     };
     const onData = d => {
       buf += d.toString('utf8');

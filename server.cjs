@@ -210,8 +210,8 @@ async function parseImport(body,options) {
 }
 const assets={'/':'index.html','/index.html':'index.html','/app.js':'app.js','/app.css':'app.css','/worker.js':'worker.js','/core.js':'core.js','/fflate.js':'fflate.js','/xlsx.full.min.js':'xlsx.full.min.js'};
 // Giris sayfasinin kaynaklari oturumsuz da sunulur (icerik gizli degildir).
-const publicAssets={'/login.js':'login.js','/login.css':'login.css'};
-const MIME={'.html':'text/html; charset=utf-8','.js':'application/javascript; charset=utf-8','.css':'text/css; charset=utf-8'};
+const publicAssets={'/login.js':'login.js','/login.css':'login.css','/logo-time.png':'logo-time.png','/logo-growity.png':'logo-growity.png'};
+const MIME={'.html':'text/html; charset=utf-8','.js':'application/javascript; charset=utf-8','.css':'text/css; charset=utf-8','.png':'image/png'};
 const mime=name=>MIME[path.extname(name)];
 // Icerik guvenlik politikasi: betikler yalniz kendi kaynagimizdan; satir ici betik, eval ve dis kaynak yok.
 // Stil ozniteliklerine (grafik cubuk boyutlari) izin verilir; <style> bloklari ve dis stil dosyalari verilmez.
@@ -229,15 +229,16 @@ let summaryState = {last:'',tries:{date:'',n:0,next:0}};
 try { summaryState = {...summaryState,...JSON.parse(fs.readFileSync(summaryFile,'utf8'))}; } catch { /* ilk calistirma */ }
 const saveSummaryState = () => { try { fs.writeFileSync(summaryFile,JSON.stringify(summaryState),{mode:0o600}); } catch(e) { console.error('summary state:',e.message); } };
 const summaryNow = () => env.SUMMARY_NOW_OVERRIDE ? new Date(env.SUMMARY_NOW_OVERRIDE) : new Date();   // SUMMARY_NOW_OVERRIDE yalniz testler icindir
+const mailImages = [['kd-time','logo-time.png'],['kd-growity','logo-growity.png']].map(([cid,f])=>({cid,type:'image/png',data:fs.readFileSync(path.join(root,f))}));
 function summaryText(t) {
   const s = buildDailySummary(state,{yesterday:t.yesterday,expectedChannels:state.expectedChannels,panelUrl:publicUrl});
-  return {...s,text:s.lines.join('\n')+(publicUrl?'\n\nPanel: '+publicUrl+'/':'')};
+  return {...s,text:s.lines.join('\n')+(publicUrl?'\n\nPanel: '+publicUrl+'/':'')+'\n\nPowered by Growity AI Studio',images:mailImages};
 }
 async function sendDailySummary(t) {
   const to = auth.recipients(['viewer','admin','superadmin']);
   if (!to.length) return {sent:0,recipients:0};
   const s = summaryText(t);
-  const r = await mail.notify('daily-summary',to,s.subject,s.text,s.html);
+  const r = await mail.notify('daily-summary',to,s.subject,s.text,s.html,s.images);
   return {...r,recipients:to.length,hasData:s.hasData};
 }
 let summaryBusy = false;
@@ -340,7 +341,7 @@ http.createServer(async(req,res)=>{
       const to=auth.emailFor(me.username);
       if(!to) throw bad(me.breakGlass?'Acil durum (admin) hesabinin e-posta adresi yoktur. Deneme icin kisi hesabinizla girin.':'Hesabiniza bir e-posta adresi ekleyin (Kullanicilar > E-posta); ozet oraya gider.');
       const s=summaryText(istanbulNow(summaryNow()));
-      try { await mail.sendNow(to,s.subject,s.text,s.html); }
+      try { await mail.sendNow(to,s.subject,s.text,s.html,s.images); }
       catch(err) { auth.audit('summary-test',ctx,{ok:false,error:String(err.message).slice(0,200)}); throw bad('E-posta gonderilemedi: '+String(err.message).slice(0,200),502); }
       auth.audit('summary-test',ctx,{ok:true,to});
       return send(res,200,{ok:true,to,day:s.day});
@@ -348,8 +349,8 @@ http.createServer(async(req,res)=>{
     if(route==='/api/summary-preview'&&method==='GET') {
       need(2);
       const s=summaryText(istanbulNow(summaryNow()));
-      res.writeHead(200,{'Content-Type':'text/html; charset=utf-8','Cache-Control':'no-store','X-Content-Type-Options':'nosniff','Content-Security-Policy':"default-src 'none'; style-src-attr 'unsafe-inline'; frame-ancestors 'none'"});
-      return res.end(s.html);
+      res.writeHead(200,{'Content-Type':'text/html; charset=utf-8','Cache-Control':'no-store','X-Content-Type-Options':'nosniff','Content-Security-Policy':"default-src 'none'; style-src-attr 'unsafe-inline'; img-src 'self'; frame-ancestors 'none'"});
+      return res.end(s.html.replace('cid:kd-time','/logo-time.png').replace('cid:kd-growity','/logo-growity.png'));
     }
     if(route==='/api/mail-test'&&method==='POST') {
       need(2); panel(req);
