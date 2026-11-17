@@ -178,6 +178,20 @@ E-posta **grafikli HTML** olarak gelir (KPI kartları ve fark etiketleri, 7 ana 
 
 Zamanlama: sunucu her dakika kontrol eder; özet o gün bir kez gönderilir (durum `summary-state.json` içinde saklanır, yeniden başlatma tekrar göndermez). Sunucu 10:00'da kapalıysa, açıldığında **3 saat içinde** yetişir. Gönderim başarısız olursa işaretlenmez; 10 dakika arayla en fazla 3 kez denenir ve hata denetim kaydına `E-posta gönderilemedi` olarak yazılır. Gönderim denetim kaydında `Günlük özet gönderildi` olarak görünür. **Kullanıcılar** ekranındaki **Günlük özeti bana gönder** düğmesi (Süper-yönetici) özeti yalnızca kendi adresinize anında gönderir; tasarımı denemek için kullanın; yanındaki **Önizle** bağlantısı aynı e-postayı göndermeden tarayıcıda açar.
 
+## Yükleme öncesi kontrol
+
+Panelden Excel yüklerken dosya kaydedilmeden önce kontrol edilir. Şunlardan biri varsa **hiçbir şey yazılmaz**; uyarılar listelenir ve "Yine de yüklemek istiyor musunuz?" diye sorulur (Tamam derseniz dosya aynı seçeneklerle yüklenir):
+- Dosyada GRP / GRPxSEC sütunu yok ya da GRP'si boş kayıtlar var (%2'den fazlası).
+- Dosya aralığında hiç verisi olmayan gün var.
+- Beklenen kanallar dosyada yok, ya da bazı kanal-günlerin verisi eksik.
+- "Dönemi yenile"de aralıktaki mevcut kayıtlar silinip yerine belirgin biçimde (%20'den fazla) az kayıt yazılacak.
+
+Onaylanıp yüklenen dosyanın uyarıları denetim kaydına ve yükleme bildirimine yazılır. Reddedilen/onay bekleyen denemeler denetim kaydında `import-warned` olarak görünür. Windows otomatik aktarımı engellenmez; uyarılar bildirim e-postasında belirtilir.
+
+Yüzdeler (panel, e-posta, Excel) ondalıksız, tam sayı olarak gösterilir; GRP ve GRPxSEC değerleri ondalıklı kalır.
+
+**Marka:** time logosu panelin üst bandında, giriş sayfasında ve e-postanın başlığında; "powered by Growity AI Studio" panelin altında, giriş sayfasında ve e-postanın altında yer alır (dosyalar `public/logo-time.png`, `public/logo-growity.png`). E-postada logolar iletinin içine gömülür (`cid:`), bu yüzden e-posta istemcilerinde "resimleri göster" demeden ve dış adrese gitmeden görünür.
+
 ## Veri silme (gerekçe ve süper-yönetici onayı)
 
 Veri azaltan işlemler gerekçe ister ve **süper-yönetici onayından** geçer:
