@@ -139,7 +139,7 @@ Sunucu, sağlayıcıdan bağımsız SMTP ile e-posta gönderir (ek paket gerekme
 | `MAIL_FROM` | Gönderen, örn. `Kanal Doluluk <bildirim@sirket.com>` (sağlayıcının izin verdiği adres) |
 | `PUBLIC_URL` | (isteğe bağlı) e-postadaki panel bağlantısı; Render'da `RENDER_EXTERNAL_URL` otomatik kullanılır |
 | `NOTIFY_ON` | (isteğe bağlı) virgülle ayrılmış bildirim türleri; varsayılan hepsi: `delete-request,delete-decision,import,import-auto,import-rejected,daily-summary` |
-| `SUMMARY_TIME`, `SUMMARY_DAYS` | (isteğe bağlı) günlük özet saati (`HH:MM`, İstanbul; varsayılan `10:00`) ve günleri (0=Pazar … 6=Cumartesi; varsayılan `1,2,3,4,5`) |
+| `SUMMARY_TIME`, `SUMMARY_DAYS` | (isteğe bağlı) günlük özet saati (`HH:MM`, İstanbul; varsayılan `11:00`) ve günleri (0=Pazar … 6=Cumartesi; varsayılan `1,2,3,4,5`) |
 | `NOTIFY_EMAILS` | (isteğe bağlı) hesabı olmayan ek alıcılar; süper-yönetici ve yönetici bildirimlerine eklenir |
 
 **Kime ne gider**
@@ -151,7 +151,7 @@ Sunucu, sağlayıcıdan bağımsız SMTP ile e-posta gönderir (ek paket gerekme
 | Panelden veri yüklendi (`import`) | Yöneticiler ve süper-yöneticiler (yükleyen hariç): eklenen/güncellenen/atlanan, arşiv toplamı, uyarılar |
 | Otomatik (Windows) aktarım tamamlandı (`import-auto`) | Yöneticiler ve süper-yöneticiler: aynı özet, eksik kanal ve saklama uyarısı |
 | Otomatik aktarım reddedildi (`import-rejected`) | Süper-yöneticiler: neden ve aralık |
-| Hafta içi her gün 10:00 (`daily-summary`) | **E-postası olan ve hesabı açık herkes** (Ekip dahil): dünün özeti |
+| Hafta içi her gün 11:00 (`daily-summary`) | **E-postası olan ve hesabı açık herkes** (Ekip dahil): dünün özeti |
 
 Ekip kullanıcıları günlük özet dışında bildirim almaz. Alıcının adresi, kullanıcının **E-posta** alanıdır (Kullanıcılar ekranından eklenir/düzenlenir); alan boşsa ve kullanıcı adı e-posta biçimindeyse (`ad@sirket.com`) kullanıcı adı kullanılır. Adresi olmayan kullanıcıya bildirim gitmez. Her alıcıya ayrı ileti gider, adresler birbirini görmez.
 
@@ -166,7 +166,7 @@ Ekip kullanıcıları günlük özet dışında bildirim almaz. Alıcının adre
 
 ## Günlük özet e-postası
 
-Hafta içi her gün **10:00'da (İstanbul saati)**, e-posta adresi tanımlı ve hesabı açık **herkese** (Ekip, Yönetici, Süper-yönetici) dünün özeti gider. Yeni kullanıcı eklediğinizde (e-postasıyla) ertesi iş günü kendiliğinden listeye girer; özeti almak istemeyen birinin hesabından e-posta adresi kaldırılır. Her alıcıya ayrı ileti gider; `NOTIFY_EMAILS` ek alıcıları bu özete dahil değildir.
+Hafta içi her gün **11:00'da (İstanbul saati)**, e-posta adresi tanımlı ve hesabı açık **herkese** (Ekip, Yönetici, Süper-yönetici) dünün özeti gider. Yeni kullanıcı eklediğinizde (e-postasıyla) ertesi iş günü kendiliğinden listeye girer; özeti almak istemeyen birinin hesabından e-posta adresi kaldırılır. Her alıcıya ayrı ileti gider; `NOTIFY_EMAILS` ek alıcıları bu özete dahil değildir.
 
 E-posta **grafikli HTML** olarak gelir (KPI kartları ve fark etiketleri, 7 ana kanal için renkli doluluk çubukları, saatlik doluluk şeridi, GRP çubukları, uyarı kutusu, "Panele git" düğmesi); HTML göstermeyen istemciler için aynı içeriğin düz metin sürümü de eklenir. HTML, e-posta istemcilerinde güvenle görünmesi için yalnızca tablo ve satır içi stil kullanır (betik, dış resim yok).
 
@@ -176,7 +176,7 @@ E-posta **grafikli HTML** olarak gelir (KPI kartları ve fark etiketleri, 7 ana 
 - **Uyarılar**: beklenen kanalın o gün verisi yok, doğrulanmamış kapsam, kapsamı olmayan kanal-gün, belirsiz tür süresi, geçersiz kayıt.
 - **Dünün verisi yüklenmemişse** e-posta bunu açıkça yazar ("DİKKAT: Dün için arşivde veri yok") ve verisi olan son günü özetler. Pazartesi günkü özet Pazar gününü kapsar.
 
-Zamanlama: sunucu her dakika kontrol eder; özet o gün bir kez gönderilir (durum `summary-state.json` içinde saklanır, yeniden başlatma tekrar göndermez). Sunucu 10:00'da kapalıysa, açıldığında **3 saat içinde** yetişir. Gönderim başarısız olursa işaretlenmez; 10 dakika arayla en fazla 3 kez denenir ve hata denetim kaydına `E-posta gönderilemedi` olarak yazılır. Gönderim denetim kaydında `Günlük özet gönderildi` olarak görünür. **Kullanıcılar** ekranındaki **Günlük özeti bana gönder** düğmesi (Süper-yönetici) özeti yalnızca kendi adresinize anında gönderir; tasarımı denemek için kullanın; yanındaki **Önizle** bağlantısı aynı e-postayı göndermeden tarayıcıda açar.
+Zamanlama: sunucu her dakika kontrol eder; özet o gün bir kez gönderilir (durum `summary-state.json` içinde saklanır, yeniden başlatma tekrar göndermez). Sunucu 11:00'da kapalıysa, açıldığında **3 saat içinde** yetişir. Gönderim başarısız olursa işaretlenmez; 10 dakika arayla en fazla 3 kez denenir ve hata denetim kaydına `E-posta gönderilemedi` olarak yazılır. Gönderim denetim kaydında `Günlük özet gönderildi` olarak görünür. **Kullanıcılar** ekranındaki **Günlük özeti bana gönder** düğmesi (Süper-yönetici) özeti yalnızca kendi adresinize anında gönderir; tasarımı denemek için kullanın; yanındaki **Önizle** bağlantısı aynı e-postayı göndermeden tarayıcıda açar.
 
 ## Yükleme öncesi kontrol
 
