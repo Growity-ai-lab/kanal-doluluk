@@ -39,7 +39,7 @@ console.log('OK: calculation and Excel workbook with both charts.');
     assert.equal(row[hdr.indexOf('18:00')],30/720);assert.equal(row[hdr.indexOf('10:00')],20/720);assert.equal(hdr.at(-1),'25:00');
     const g=sheet('Saatlik GRP'),grow=g.find(r=>r[0]==='Atv');assert.equal(grow[g[0].indexOf('18:00')],0.6);assert.equal(grow[g[0].indexOf('10:00')],0.1);
     const res=sheet('Sonuçlar');assert.deepEqual(res[0].slice(-2),['GRP','GRPxSEC']);const ar=res.find(r=>r[0]==='Atv'||r[0]==='Marka A');assert.equal(ar[ar.length-1]>0,true);
-    const cmp=sheet('Karşılaştırma');assert.equal(cmp[2][1],'2026-11-06');
+    const cmp=sheet('Karşılaştırma');assert.equal(cmp[2][1],'2026-11-06');assert.equal(cmp.find(r=>r[0]==='Gün sayısı')[1],'1 ↔ 1');
     assert.equal(cmp.find(r=>r[0]==='Reklam süresi (sn)')[1],50);assert.equal(cmp.find(r=>r[0]==='Reklam süresi (sn)')[2],15);   // 30+20 vs 15
     const gxs=sheet('Saatlik GRPxSEC'),gxr=gxs.find(r=>r[0]==='Atv');assert.equal(gxr[gxs[0].indexOf('18:00')],18);assert.equal(gxr[gxs[0].indexOf('10:00')],2);
     assert.equal(cmp.find(r=>r[0]==='GRPxSEC')[1],20);assert.equal(cmp.find(r=>r[0]==='GRPxSEC')[2],3);

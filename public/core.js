@@ -33,4 +33,27 @@ function analyze(rows,f,coverage,rules,verified){
  let list=[...entities].map(([name,v])=>({name,...v,capacity:f.view==='channel'?(byChannel.get(name)?.capacity||0):cap,share:baseTotal?v.seconds/baseTotal:0})).sort((a,b)=>f.view==='channel'?orderChannels(a.name,b.name):b.seconds-a.seconds);
  return {channels,periods:[...periods].sort().map(([name,v])=>({name,...v})),list,matrix:[...matrix].map(([key,v])=>({key,...v})),hourly:[...hourly].map(([key,v])=>({key,...v})),hours:hoursList,capacity:cap,included,matched,grp:grpTotal,grpx:grpxTotal,hasGrp,reviewSeconds,excludedSeconds,invalid,after,missing,unverified,baseTotal};
 }
-if(typeof module!=='undefined')module.exports={DEFAULT_RULES,MAIN,orderChannels,analyze,period,timePart,datesBetween};
+// ---- Tarih ve donem yardimcilari (saf; testlenebilir)
+function addDays(d,n){let t=new Date(d+'T12:00:00Z');t.setUTCDate(t.getUTCDate()+n);return t.toISOString().slice(0,10);}
+function daysBetween(a,b){return Math.round((Date.parse(b+'T12:00:00Z')-Date.parse(a+'T12:00:00Z'))/864e5)+1;}
+function monthEnd(y,m){return new Date(Date.UTC(y,m,0,12)).getUTCDate();}                         // m: 1-12
+function addMonths(d,k){let y=+d.slice(0,4),m=+d.slice(5,7),day=+d.slice(8,10),t=y*12+(m-1)+k,ny=Math.floor(t/12),nm=t%12+1;return ny+'-'+String(nm).padStart(2,'0')+'-'+String(Math.min(day,monthEnd(ny,nm))).padStart(2,'0');}
+const isMonthStart=d=>d.slice(8,10)==='01',isMonthEnd=d=>+d.slice(8,10)===monthEnd(+d.slice(0,4),+d.slice(5,7)),weekdayMon0=d=>(new Date(d+'T12:00:00Z').getUTCDay()+6)%7;
+// Karsilastirma donemi. mode: 'prev' (onceki donem), 'week' (7 gun once), 'month' (onceki ay, ayni gunler), 'custom' (custom.start[, custom.end]).
+//  prev : ayni uzunlukta hemen onceki aralik; aralik tam takvim ay(lar)iysa hemen onceki ayni sayida tam ay.
+//  week : her iki ucu 7 gun geri (yalniz 7 gune kadar; daha uzun aralikta ortusme olacagindan 'prev'e doner, note ile bildirir).
+//  month: her iki ucu 1 takvim ayi geri (ay sonu gunleri kisaltilir); tam ay secildiyse onceki tam ay.
+//  custom: custom.end yoksa secili aralikla ayni uzunluk.
+function resolveCompare(start,end,mode,custom){custom=custom||{};if(!mode)return null;let n=daysBetween(start,end);
+ const prev=()=>{if(isMonthStart(start)&&isMonthEnd(end)){let m=(+end.slice(0,4)*12+ +end.slice(5,7))-(+start.slice(0,4)*12+ +start.slice(5,7))+1;return {start:addMonths(start,-m),end:addDays(start,-1),kind:'prev-months'};}return {start:addDays(start,-n),end:addDays(start,-1),kind:'prev'};};
+ if(mode==='prev')return prev();
+ if(mode==='week'){if(n>7)return {...prev(),note:'“7 gün önce” en fazla 7 günlük aralıklar içindir (daha uzun aralıkta dönemler örtüşür); önceki dönem kullanıldı.'};return {start:addDays(start,-7),end:addDays(end,-7),kind:'week'};}
+ if(mode==='month'){let pe=addMonths(end,-1),full=isMonthStart(start)&&isMonthEnd(end);return {start:addMonths(start,-1),end:full?pe.slice(0,8)+String(monthEnd(+pe.slice(0,4),+pe.slice(5,7))).padStart(2,'0'):pe,kind:'month'};}
+ if(mode==='custom'){if(!custom.start)return null;let e=custom.end||addDays(custom.start,n-1);return e<custom.start?null:{start:custom.start,end:e,kind:'custom'};}
+ return null;}
+// Hizli donemler; last = analiz icin tamamlanmis son gun (dun). Hafta Pazartesi-Pazar.
+function presetRange(name,last){let wd=weekdayMon0(last),m1=last.slice(0,8)+'01';
+ switch(name){case 'yesterday':return [last,last];case 'last7':return [addDays(last,-6),last];case 'last30':return [addDays(last,-29),last];
+  case 'thisWeek':return [addDays(last,-wd),last];case 'prevWeek':{let ms=addDays(last,-wd-7);return [ms,addDays(ms,6)];}
+  case 'thisMonth':return [m1,last];case 'prevMonth':return [addMonths(m1,-1),addDays(m1,-1)];}return null;}
+if(typeof module!=='undefined')module.exports={DEFAULT_RULES,MAIN,orderChannels,analyze,period,timePart,datesBetween,addDays,daysBetween,addMonths,resolveCompare,presetRange};

@@ -1,5 +1,5 @@
 const assert=require('node:assert/strict');
-const {analyze,period,DEFAULT_RULES,timePart}=require('../public/core.js');
+const {analyze,period,DEFAULT_RULES,timePart,resolveCompare,presetRange,addMonths,daysBetween}=require('../public/core.js');
 const base={start:'2026-11-13',end:'2026-11-13',granularity:'day',group:'',channel:'',sector:'',firm:'',brand:'',view:'channel',hourStart:7,bands:['OPT','Erken PT','PT','Geç PT']};
 const row=(a,dur,o={})=>[o.ch||'Atv',o.sector||'Gıda','Gıda',o.firm||'F','Ü',o.brand||'M',o.date||'2026-11-13',o.type||'Normal Spot',o.detail||'Kusak Spot',a,a+dur,dur];
 const cov=['Atv|2026-11-13'];
@@ -107,4 +107,31 @@ const cmpRows=[rowG(64800,30,0.5),rowG(64800,60,0.2,{date:'2026-11-06'})];
 const cur=analyze(cmpRows,{...base,start:'2026-11-13',end:'2026-11-13'},['Atv|2026-11-13','Atv|2026-11-06'],DEFAULT_RULES);
 const prev=analyze(cmpRows,{...base,start:'2026-11-06',end:'2026-11-06'},['Atv|2026-11-13','Atv|2026-11-06'],DEFAULT_RULES);
 assert.equal(cur.included,30);assert.equal(prev.included,60);near(cur.grp,0.5);near(prev.grp,0.2);
+
+// ---- Donem karsilastirma ve hizli donemler
+const rc=(s,e,m,c)=>{const r=resolveCompare(s,e,m,c);return r&&[r.start,r.end,r.kind];};
+assert.deepEqual(rc('2026-11-10','2026-11-10','prev'),['2026-11-09','2026-11-09','prev']);
+assert.deepEqual(rc('2026-11-10','2026-11-16','prev'),['2026-11-03','2026-11-09','prev']);               // hafta -> onceki hafta (ayni uzunluk)
+assert.deepEqual(rc('2026-11-01','2026-11-30','prev'),['2026-10-01','2026-10-31','prev-months']);         // tam ay -> onceki tam ay (31 gun)
+assert.deepEqual(rc('2026-09-01','2026-11-30','prev'),['2026-06-01','2026-08-31','prev-months']);         // 3 tam ay -> onceki 3 tam ay
+assert.deepEqual(rc('2026-03-01','2026-03-31','prev'),['2026-02-01','2026-02-28','prev-months']);         // subat 28 gun
+assert.deepEqual(rc('2026-01-01','2026-01-31','prev'),['2025-12-01','2025-12-31','prev-months']);         // yil sinirini asar
+assert.deepEqual(rc('2026-11-10','2026-11-16','week'),['2026-11-03','2026-11-09','week']);
+assert.deepEqual(rc('2026-11-10','2026-11-10','week'),['2026-11-03','2026-11-03','week']);                // 10 Kasim <-> 3 Kasim (ayni gun)
+const wkLong=resolveCompare('2026-11-01','2026-11-16','week');assert.ok(wkLong.note&&wkLong.kind==='prev');             // >7 gun: ortusmeyi onler
+assert.deepEqual(rc('2026-11-01','2026-11-16','month'),['2026-10-01','2026-10-16','month']);              // ay basindan bugune
+assert.deepEqual(rc('2026-11-01','2026-11-30','month'),['2026-10-01','2026-10-31','month']);              // tam ay -> tam onceki ay
+assert.deepEqual(rc('2026-03-31','2026-04-05','month'),['2026-02-28','2026-03-05','month']);              // ay sonu kisaltilir
+assert.deepEqual(rc('2026-11-10','2026-11-16','custom',{start:'2026-11-03'}),['2026-11-03','2026-11-09','custom']);          // bitis yoksa ayni uzunluk
+assert.deepEqual(rc('2026-11-10','2026-11-16','custom',{start:'2026-10-01',end:'2026-10-15'}),['2026-10-01','2026-10-15','custom']);
+assert.equal(resolveCompare('2026-11-10','2026-11-16','custom',{}),null);assert.equal(resolveCompare('2026-11-10','2026-11-16','custom',{start:'2026-10-05',end:'2026-10-01'}),null);
+assert.equal(resolveCompare('2026-11-10','2026-11-16',''),null);assert.equal(resolveCompare('2026-11-10','2026-11-16','bilinmeyen'),null);
+for(const [s,e,m] of [['2026-11-10','2026-11-16','prev'],['2026-11-01','2026-11-30','prev'],['2026-11-10','2026-11-16','week']]){const r=resolveCompare(s,e,m);assert.ok(r.end<s,'karsilastirma donemi secili donemle ortusmemeli: '+m);}
+assert.equal(daysBetween('2026-10-01','2026-10-31'),31);assert.equal(addMonths('2026-01-31',1),'2026-02-28');
+const pr=(n,l)=>presetRange(n,l).join(' ');
+assert.equal(pr('yesterday','2026-11-16'),'2026-11-16 2026-11-16');assert.equal(pr('last7','2026-11-16'),'2026-11-10 2026-11-16');assert.equal(pr('last30','2026-11-16'),'2026-10-18 2026-11-16');
+assert.equal(pr('thisWeek','2026-11-16'),'2026-11-16 2026-11-16');assert.equal(pr('thisWeek','2026-11-15'),'2026-11-09 2026-11-15');  // Pazartesi-Pazar
+assert.equal(pr('prevWeek','2026-11-16'),'2026-11-09 2026-11-15');assert.equal(pr('prevWeek','2026-11-12'),'2026-11-02 2026-11-08');
+assert.equal(pr('thisMonth','2026-11-16'),'2026-11-01 2026-11-16');assert.equal(pr('prevMonth','2026-11-16'),'2026-10-01 2026-10-31');assert.equal(pr('prevMonth','2026-01-10'),'2025-12-01 2025-12-31');
+assert.equal(presetRange('bilinmeyen','2026-11-16'),null);
 console.log('OK: core calculation (bands, midnight, rules, coverage, share, grouping, GRP, hourly).');

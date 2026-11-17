@@ -13,3 +13,4 @@ textarea{resize:vertical;font:inherit;min-height:70px}.badge{display:inline-bloc
 #hourTable{max-width:100%;overflow-x:auto}#hourTable table{width:max-content;min-width:100%}#hourTable th{min-width:54px;text-align:center;font-size:11px;padding:8px 4px}#hourTable th:first-child,#hourTable td:first-child{position:sticky;left:0;background:#fff;z-index:1;min-width:110px;text-align:left}#hourTable .heat-cell{min-width:54px;padding:8px 4px;font-size:11px}
 .grp-bars{margin-bottom:18px}.grp-sub{font-size:11px;color:var(--muted);margin-left:6px}
 @media(max-width:850px){.cmp-row{grid-template-columns:repeat(2,1fr)}.cmp-cards{grid-template-columns:repeat(2,1fr)}.cmp-split{grid-template-columns:1fr}}
+.cmp-info{margin:8px 0 0;min-height:16px}.cmp-row{margin-top:14px;grid-template-columns:repeat(4,1fr)}
