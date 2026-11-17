@@ -140,6 +140,15 @@ function seed(dir) {
     const ok = await post(await login('super@example.com'));assert.equal(ok.status, 200);
     const mm = await fake.waitFor(() => true);
     assert.equal(mm.to, 'super@example.com');assert.match(mm.subject, /Günlük özet — 09 May Pazar/);assert.match(mm.text, /DİKKAT: Dün \(14 May Cuma\)/);assert.equal(fake.mails.length, 1);
+    // yalniz Super-yoneticilere deneme (diger kullanicilara gitmez)
+    const sc = await login('super@example.com');
+    assert.equal((await fetch(base + '/api/summary-test?to=supers', { method: 'POST', headers: { Cookie: await login('yonetici'), 'X-Panel-Request': '1' }, body: '{}' })).status, 403);
+    const before = fake.mails.length;
+    const sr = await fetch(base + '/api/summary-test?to=supers', { method: 'POST', headers: { Cookie: sc, 'X-Panel-Request': '1' }, body: '{}' });
+    assert.equal(sr.status, 200);const sj = await sr.json();
+    assert.equal(sj.sent, sj.total);assert.ok(sj.total >= 1);
+    const got = fake.mails.slice(before).map(x => x.to).sort();
+    assert.equal(got.length, sj.total);assert.ok(got.includes('super@example.com'));assert.ok(!got.includes('ekip@example.com') && !got.includes('yonetici@example.com'));
     const info = await (await fetch(base + '/api/users', { headers: { Cookie: await login('super@example.com') } })).json();
     assert.deepEqual(info.mail.summary, { enabled: true, time: '11:00', days: [1, 2, 3, 4, 5] });
     await stop();
