@@ -18,7 +18,7 @@ const auth = createAuth({dir,adminPassword:secrets[0],maxFails:Number(env.LOGIN_
 // E-posta bildirimi (SMTP_HOST/SMTP_PORT/SMTP_USER/SMTP_PASSWORD/MAIL_FROM tanimliysa acik). Gonderim hatalari istegi bozmaz; denetim kaydina yazilir.
 const { createMailer } = require('./lib/mail.cjs');
 const mail = createMailer(env,{onError:(e,kind)=>auth.audit('mail-failed',{user:'sistem'},{kind,error:String(e.message).slice(0,200)})});
-const NOTIFY_KINDS = ['delete-request','delete-decision','import','import-auto','import-rejected'];
+const NOTIFY_KINDS = ['delete-request','delete-decision','import','import-auto','import-rejected','daily-summary'];
 const notifyOn = new Set(String(env.NOTIFY_ON||NOTIFY_KINDS.join(',')).split(',').map(x=>x.trim()).filter(k=>NOTIFY_KINDS.includes(k)));
 const extraRecipients = String(env.NOTIFY_EMAILS||'').split(/[;,\s]+/).filter(Boolean);
 const publicUrl = String(env.PUBLIC_URL||env.RENDER_EXTERNAL_URL||'').replace(/\/+$/,'');
@@ -219,6 +219,43 @@ const CSP=["default-src 'none'","script-src 'self'","style-src 'self'","style-sr
 function date(s) {
   return /^\d{4}-\d{2}-\d{2}$/.test(s) && Number.isFinite(Date.parse(s)) && new Date(s).toISOString().slice(0,10)===s;
 }
+// ---- Gunluk ozet e-postasi: hafta ici 10:00 (Istanbul), e-postasi olan ve hesabi acik herkese. Ayni gun bir kez; sunucu kapaliysa 3 saat icinde yetisir.
+const { buildDailySummary, istanbulNow } = require('./lib/summary.cjs');
+const SUMMARY_DAYS = String(env.SUMMARY_DAYS||'1,2,3,4,5').split(',').map(Number).filter(n=>Number.isInteger(n)&&n>=0&&n<=6);
+const SUMMARY_TIME = /^([01]?\d|2[0-3]):([0-5]\d)$/.test(String(env.SUMMARY_TIME||'10:00')) ? String(env.SUMMARY_TIME||'10:00') : '10:00';
+const SUMMARY_MIN = Number(SUMMARY_TIME.split(':')[0])*60+Number(SUMMARY_TIME.split(':')[1]), SUMMARY_WINDOW = 180;
+const summaryFile = path.join(dir,'summary-state.json');
+let summaryState = {last:'',tries:{date:'',n:0,next:0}};
+try { summaryState = {...summaryState,...JSON.parse(fs.readFileSync(summaryFile,'utf8'))}; } catch { /* ilk calistirma */ }
+const saveSummaryState = () => { try { fs.writeFileSync(summaryFile,JSON.stringify(summaryState),{mode:0o600}); } catch(e) { console.error('summary state:',e.message); } };
+const summaryNow = () => env.SUMMARY_NOW_OVERRIDE ? new Date(env.SUMMARY_NOW_OVERRIDE) : new Date();   // SUMMARY_NOW_OVERRIDE yalniz testler icindir
+function summaryText(t) {
+  const s = buildDailySummary(state,{yesterday:t.yesterday,expectedChannels:state.expectedChannels});
+  return {...s,text:s.lines.join('\n')+(publicUrl?'\n\nPanel: '+publicUrl+'/':'')};
+}
+async function sendDailySummary(t) {
+  const to = auth.recipients(['viewer','admin','superadmin']);
+  if (!to.length) return {sent:0,recipients:0};
+  const s = summaryText(t);
+  const r = await mail.notify('daily-summary',to,s.subject,s.text);
+  return {...r,recipients:to.length,hasData:s.hasData};
+}
+let summaryBusy = false;
+async function summaryTick() {
+  if (summaryBusy||!mail.enabled||!notifyOn.has('daily-summary')) return;
+  const t = istanbulNow(summaryNow());
+  if (!SUMMARY_DAYS.includes(t.dow)||t.minutes<SUMMARY_MIN||t.minutes>=SUMMARY_MIN+SUMMARY_WINDOW||summaryState.last===t.date) return;
+  if (summaryState.tries.date===t.date&&(summaryState.tries.n>=3||Date.now()<summaryState.tries.next)) return;
+  summaryBusy = true;
+  try {
+    const r = await sendDailySummary(t);
+    if (r.recipients===0||r.sent>0) { summaryState.last = t.date; auth.audit('daily-summary',{user:'sistem'},{date:t.yesterday,recipients:r.recipients,sent:r.sent,hasData:r.hasData}); }
+    else summaryState.tries = {date:t.date,n:(summaryState.tries.date===t.date?summaryState.tries.n:0)+1,next:Date.now()+10*60*1000};   // gonderilemedi: 10 dk arayla en fazla 3 deneme
+    saveSummaryState();
+  } catch(e) { console.error('daily summary:',e.message); }
+  finally { summaryBusy = false; }
+}
+if (mail.enabled) { const ms = Number(env.SUMMARY_TICK_MS)||60000; setInterval(summaryTick,ms).unref(); setTimeout(summaryTick,Math.min(ms,2000)).unref(); }
 function clientIp(req) {
   const f=String(req.headers['x-forwarded-for']||'').split(',').map(x=>x.trim()).filter(Boolean);
   return f.length?f[f.length-1]:(req.socket.remoteAddress||'');
@@ -297,7 +334,17 @@ http.createServer(async(req,res)=>{
       res.setHeader('Set-Cookie',cookieHeader(req,r.cookie,43200));
       return send(res,200,{ok:true});
     }
-    if(route==='/api/users'&&method==='GET') {need(2); return send(res,200,{users:auth.listUsers(),mail:{enabled:mail.enabled,from:mail.from,notifyOn:[...notifyOn],extraRecipients:extraRecipients.length}});}
+    if(route==='/api/users'&&method==='GET') {need(2); return send(res,200,{users:auth.listUsers(),mail:{enabled:mail.enabled,from:mail.from,notifyOn:[...notifyOn],extraRecipients:extraRecipients.length,summary:{enabled:notifyOn.has('daily-summary'),time:SUMMARY_TIME,days:SUMMARY_DAYS}}});}
+    if(route==='/api/summary-test'&&method==='POST') {
+      need(2); panel(req);
+      const to=auth.emailFor(me.username);
+      if(!to) throw bad(me.breakGlass?'Acil durum (admin) hesabinin e-posta adresi yoktur. Deneme icin kisi hesabinizla girin.':'Hesabiniza bir e-posta adresi ekleyin (Kullanicilar > E-posta); ozet oraya gider.');
+      const s=summaryText(istanbulNow(summaryNow()));
+      try { await mail.sendNow(to,s.subject,s.text); }
+      catch(err) { auth.audit('summary-test',ctx,{ok:false,error:String(err.message).slice(0,200)}); throw bad('E-posta gonderilemedi: '+String(err.message).slice(0,200),502); }
+      auth.audit('summary-test',ctx,{ok:true,to});
+      return send(res,200,{ok:true,to,day:s.day});
+    }
     if(route==='/api/mail-test'&&method==='POST') {
       need(2); panel(req);
       const to=auth.emailFor(me.username);
