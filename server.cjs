@@ -350,6 +350,16 @@ http.createServer(async(req,res)=>{
     if(route==='/api/users'&&method==='GET') {need(2); return send(res,200,{users:auth.listUsers(),mail:{enabled:mail.enabled,from:mail.from,notifyOn:[...notifyOn],extraRecipients:extraRecipients.length,summary:{enabled:notifyOn.has('daily-summary'),time:SUMMARY_TIME,days:SUMMARY_DAYS}}});}
     if(route==='/api/summary-test'&&method==='POST') {
       need(2); panel(req);
+      if(url.searchParams.get('to')==='supers') {   // deneme: yalniz e-postasi olan tum Super-yoneticilere (diger kullanicilara gitmez)
+        const list=auth.recipients(['superadmin']);
+        if(!list.length) throw bad('E-postası tanımlı Süper-yönetici yok. Kullanıcılar > E-posta bölümünden ekleyin.');
+        const s=summaryText(istanbulNow(summaryNow()));
+        const failed=[];
+        for(const to of list) { try { await mail.sendNow(to,s.subject,s.text,s.html,s.images); } catch(err) { failed.push(to+': '+String(err.message).slice(0,120)); } }
+        auth.audit('summary-test',ctx,{ok:failed.length===0,to:'supers',sent:list.length-failed.length,failed});
+        if(failed.length===list.length) throw bad('E-posta gonderilemedi: '+failed[0],502);
+        return send(res,200,{ok:true,sent:list.length-failed.length,total:list.length,failed,day:s.day});
+      }
       const to=auth.emailFor(me.username);
       if(!to) throw bad(me.breakGlass?'Acil durum (admin) hesabinin e-posta adresi yoktur. Deneme icin kisi hesabinizla girin.':'Hesabiniza bir e-posta adresi ekleyin (Kullanicilar > E-posta); ozet oraya gider.');
       const s=summaryText(istanbulNow(summaryNow()));
