@@ -58,4 +58,41 @@ const two2=analyze([row(64800,30),row(64800,30,{date:'2026-11-14'})],{...base,en
 assert.equal(two2.unverified,1);assert.equal(two2.missing,0);
 assert.deepEqual(two2.matrix.map(m=>m.unverified),[0,1]);
 assert.equal(analyze([row(64800,30)],base,cov,DEFAULT_RULES).unverified,0); // dogrulama takibi yoksa sayilmaz
-console.log('OK: core calculation (bands, midnight, rules, coverage, share, grouping).');
+
+// ---- GRP: bant sinirinda sureye orantili dagitilir; sure yoksa bitis-baslangic; hariç/belirsiz türler GRP'ye girmez
+const rowG=(a,dur,grp,o={})=>[o.ch||'Atv',o.sector||'Gıda','Gıda',o.firm||'F','Ü',o.brand||'M',o.date||'2026-11-13',o.type||'Normal Spot',o.detail||'Kusak Spot',a,a+dur,o.nodur?null:dur,grp];
+const edge=rowG(17*3600+59*60+30,60,0.6); // 17:59:30-18:00:30: 30 sn OPT, 30 sn Erken PT
+const near=(x,y)=>assert.ok(Math.abs(x-y)<1e-9,x+' != '+y);
+let g=run([edge],{bands:['OPT']});near(g.grp,0.3);near(g.list[0].grp,0.3);assert.equal(g.hasGrp,true);
+near(run([edge],{bands:['Erken PT']}).grp,0.3);near(run([edge]).grp,0.6);
+near(run([rowG(64800,30,0.5,{nodur:true})]).grp,0.5);                       // sure null: bitis-baslangic
+assert.equal(run([rowG(64800,30,null)]).hasGrp,false);                      // GRP yok
+assert.equal(run([rowG(64800,30,null)]).grp,0);
+near(run([rowG(64800,30,0.5,{type:'Sponsorluk',detail:'Sponsor Sundu'}),rowG(64800,30,0.2)]).grp,0.2); // hariç tür GRP'ye girmez
+near(run([rowG(64800,30,0.5,{brand:'A'}),rowG(64830,30,0.25,{brand:'B'})],{brand:'B'}).grp,0.25);       // filtre
+near(run([rowG(64800,30,0.5),rowG(64830,30,0.25,{date:'2026-11-12'})]).grp,0.5);                        // aralik disi
+// sektor/firma gorunumunde GRP kalemleri toplanir
+const v2=run([rowG(64800,30,0.4,{firm:'X'}),rowG(64830,30,0.1,{firm:'X'}),rowG(64860,30,0.3,{firm:'Y'})],{view:'firm'});
+near(v2.list.find(x=>x.name==='X').grp,0.5);near(v2.list.find(x=>x.name==='Y').grp,0.3);
+
+// ---- Saatlik kirilim: saniye, GRP ve kapasite saat/kanal bazinda
+const hv=run([edge,rowG(20*3600+10,20,0.2)]);
+const H=Object.fromEntries(hv.hourly.map(x=>[x.key,x]));
+assert.equal(H['Atv|17'].seconds,30);assert.equal(H['Atv|18'].seconds,30);assert.equal(H['Atv|20'].seconds,20);
+near(H['Atv|17'].grp,0.3);near(H['Atv|18'].grp,0.3);near(H['Atv|20'].grp,0.2);
+assert.equal(H['Atv|17'].capacity,720);assert.equal(H['Atv|7'].capacity,720);assert.equal(H['Atv|25'].capacity,720);
+assert.deepEqual(hv.hours,[7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25]);
+assert.equal(hv.hourly.reduce((t,x)=>t+x.capacity,0),hv.capacity);                              // saatlik kapasite toplami genel kapasiteye esit
+assert.equal(hv.hourly.reduce((t,x)=>t+x.seconds,0),hv.included);                               // saatlik saniye toplami dahil sureye esit
+assert.deepEqual(run([edge],{bands:['PT']}).hours,[20,21,22,23]);                               // bant secimi saat listesini daraltir
+assert.equal(run([edge],{bands:['PT']}).hourly.filter(x=>x.capacity>0).length,4);
+assert.equal(run([edge],{},[]).hourly.filter(x=>x.capacity>0).length,0);                        // kapsam yoksa saatlik kapasite yok
+// saatlik toplamlar cok gunde ortalama: 2 gun kapsamli, bir gunde spot
+const twoDay=analyze([rowG(64800,36,0.4)],{...base,end:'2026-11-14'},['Atv|2026-11-13','Atv|2026-11-14'],DEFAULT_RULES);
+assert.equal(twoDay.hourly.find(x=>x.key==='Atv|18').capacity,1440);assert.equal(twoDay.hourly.find(x=>x.key==='Atv|18').seconds,36);
+// karsilastirma donemi ayni filtrelerle ayri analiz: kapsami olmayan donem 'missing' sayar
+const cmpRows=[rowG(64800,30,0.5),rowG(64800,60,0.2,{date:'2026-11-06'})];
+const cur=analyze(cmpRows,{...base,start:'2026-11-13',end:'2026-11-13'},['Atv|2026-11-13','Atv|2026-11-06'],DEFAULT_RULES);
+const prev=analyze(cmpRows,{...base,start:'2026-11-06',end:'2026-11-06'},['Atv|2026-11-13','Atv|2026-11-06'],DEFAULT_RULES);
+assert.equal(cur.included,30);assert.equal(prev.included,60);near(cur.grp,0.5);near(prev.grp,0.2);
+console.log('OK: core calculation (bands, midnight, rules, coverage, share, grouping, GRP, hourly).');

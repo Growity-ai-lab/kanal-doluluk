@@ -478,6 +478,31 @@ const fake=createFakeSmtp();
  const bigRes=await post(append,admin,stallBook);probing=false;await prober;
  assert.equal(bigRes.status,200,await bigRes.clone().text());
  assert.ok(worst<2500,'ayristirma sirasinda saglik kontrolu '+worst+' ms bekledi');
+
+ // ---- GRP: 'G.R.P - 20+ ABC1' okunur, 'GRPxSURE' yok sayilir; virgullu ondalik ve bos hucre; GRP'siz eski kayitlar GRP ile guncellenir
+ const grpHead=[...headers,'ADET','G.R.P - 20+ ABC1','GRPxSURE - 20+ ABC1'];
+ const grpBook=lines=>{const w=XLSX.utils.book_new();XLSX.utils.book_append_sheet(w,XLSX.utils.aoa_to_sheet([grpHead,...lines]));return XLSX.write(w,{type:'buffer',bookType:'xlsx',compression:true});};
+ const gl=(date,brand,grp)=>['Atv','Gıda','Gıda','Örnek','Ürün',brand,date,'Normal Spot','Kusak Spot','18:00:00','18:00:30',30,1,grp,99];
+ const day1=r=>r.rows.filter(x=>x[6]==='2027-05-01');
+ await imp(book(['2027-05-01'],30));                                               // GRP'siz (eski) kayit
+ assert.equal(day1(await rowsNow()).every(x=>x[12]===undefined),true);
+ let gr=await imp(grpBook([gl('2027-05-01','Marka',0.123456),gl('2027-05-01','Marka B','0,5'),gl('2027-05-01','Marka C','')]));
+ assert.deepEqual([gr.added,gr.updated,gr.skipped],[2,1,0]);                       // eski kayit GRP ile guncellendi
+ const gs=Object.fromEntries(day1(await rowsNow()).map(x=>[x[5],x]));
+ assert.equal(gs['Marka'][12],0.123);assert.equal(gs['Marka B'][12],0.5);assert.equal(gs['Marka C'][12],null);
+ assert.equal(gs['Marka'].length,13);assert.equal(gs['Marka'][11],30);              // GRPxSURE alinmaz
+ gr=await imp(grpBook([gl('2027-05-01','Marka',0.123456),gl('2027-05-01','Marka B','0,5'),gl('2027-05-01','Marka C','')]));
+ assert.deepEqual([gr.added,gr.updated,gr.skipped],[0,0,3]);                       // ayni dosya: gereksiz guncelleme yok
+ gr=await imp(grpBook([gl('2027-05-01','Marka',0.2)]));
+ assert.deepEqual([gr.added,gr.updated,gr.skipped],[0,1,0]);                       // GRP degisti: guncellenir
+ assert.equal(day1(await rowsNow()).find(x=>x[5]==='Marka')[12],0.2);
+ // SÜRE sutunu olmayan ama GRP olan dosya: sure null (bitis-baslangic kullanilir), GRP korunur
+ const noDur=(()=>{const w=XLSX.utils.book_new();XLSX.utils.book_append_sheet(w,XLSX.utils.aoa_to_sheet([[...headers.slice(0,11),'G.R.P - 20+ ABC1'],['Atv','Gıda','Gıda','Örnek','Ürün','Marka','2027-05-02','Normal Spot','Kusak Spot','18:00:00','18:00:30',0.4]]));return XLSX.write(w,{type:'buffer',bookType:'xlsx'});})();
+ gr=await imp(noDur);assert.equal(gr.added,1);
+ const nd=(await rowsNow()).rows.find(x=>x[6]==='2027-05-02');assert.equal(nd[11],null);assert.equal(nd[12],0.4);
+ // kalici: yeniden baslatmadan sonra da ayni
+ await stop();await start();
+ assert.equal((await rowsNow()).rows.find(x=>x[6]==='2027-05-02')[12],0.4);
  if(process.env.TEST_ADEX_XLSX){
    const sample=await post('/api/import',admin,fs.readFileSync(process.env.TEST_ADEX_XLSX));
    assert.equal(sample.status,200,await sample.clone().text());
