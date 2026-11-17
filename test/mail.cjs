@@ -68,6 +68,10 @@ const { createMailer, smtpSend, buildMessage, isEmail } = require('../lib/mail.c
 
   // --- mailer: yapilandirma, alici suzme, hata yalitimi, sira
   assert.equal(createMailer({}).enabled, false);
+  assert.deepEqual(createMailer({}).missing, ['SMTP_HOST', 'MAIL_FROM', 'SMTP_USER', 'SMTP_PASSWORD']);
+  assert.deepEqual(createMailer({ SMTP_HOST: 'h', SMTP_USER: 'u', MAIL_FROM: 'a@b.co' }).missing, ['SMTP_PASSWORD']);
+  assert.ok(createMailer({ SMTP_HOST: 'h', SMTP_USER: 'u', SMTP_PASSWORD: 'p', MAIL_FROM: 'gecersiz' }).missing[0].startsWith('MAIL_FROM'));
+  assert.deepEqual(createMailer({ SMTP_HOST: 'h', SMTP_USER: 'u', SMTP_PASSWORD: 'p', MAIL_FROM: 'a@b.co' }).missing, []);
   assert.equal(createMailer({ SMTP_HOST: 'smtp.example.com', MAIL_FROM: 'x@example.com' }).enabled, false); // kimlik bilgisi yok
   assert.equal(createMailer({ SMTP_HOST: 'smtp.example.com', SMTP_USER: 'u', SMTP_PASSWORD: 'p', MAIL_FROM: 'gecersiz' }).enabled, false);
   assert.equal(createMailer({ SMTP_HOST: 'smtp.example.com', SMTP_USER: 'u', SMTP_PASSWORD: 'p', MAIL_FROM: 'Kanal <x@example.com>' }).enabled, true);
