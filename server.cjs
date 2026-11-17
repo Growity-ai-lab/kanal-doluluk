@@ -243,7 +243,7 @@ const saveSummaryState = () => { try { fs.writeFileSync(summaryFile,JSON.stringi
 const summaryNow = () => env.SUMMARY_NOW_OVERRIDE ? new Date(env.SUMMARY_NOW_OVERRIDE) : new Date();   // SUMMARY_NOW_OVERRIDE yalniz testler icindir
 const mailImages = [['kd-time','logo-time.png'],['kd-growity','logo-growity.png']].map(([cid,f])=>({cid,type:'image/png',data:fs.readFileSync(path.join(root,f))}));
 function summaryText(t) {
-  const s = buildDailySummary(state,{yesterday:t.yesterday,expectedChannels:state.expectedChannels,panelUrl:publicUrl});
+  const s = buildDailySummary(state,{yesterday:t.yesterday,start:t.start,expectedChannels:state.expectedChannels,panelUrl:publicUrl});
   return {...s,text:s.lines.join('\n')+(publicUrl?'\n\nPanel: '+publicUrl+'/':'')+'\n\nPowered by Growity AI Studio',images:mailImages};
 }
 async function sendDailySummary(t) {

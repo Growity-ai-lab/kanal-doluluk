@@ -22,16 +22,34 @@ const PORT = 18360, base = 'http://localhost:' + PORT;
   assert.deepEqual([t.date, t.dow, t.minutes, t.yesterday], ['2027-05-10', 1, 630, '2027-05-09']);
   const late = istanbulNow(new Date('2027-05-09T21:30:00Z'));                      // Istanbul'da ertesi gun 00:30 (Pazartesi)
   assert.deepEqual([late.date, late.dow, late.minutes], ['2027-05-10', 1, 30]);
+  { // donem secimi: Pazartesi = Cuma-Pazar (3 gun), diger gunler = dun; eksik gun uyarisi
+    const r = (ch, d) => [ch, 'G', 'G', 'F', 'Ü', 'M', d, 'Normal Spot', 'Kusak Spot', 72000, 72300, 300, 0.1, 30];
+    const days = ['2027-05-01', '2027-05-02', '2027-05-03', '2027-05-04', '2027-05-08', '2027-05-09', '2027-05-10'];
+    const st = { rows: days.map(d => r('Atv', d)), coverage: days.map(d => 'Atv|' + d), verified: days.map(d => 'Atv|' + d), rules: DEFAULT_RULES, expectedChannels: [] };
+    const mon = istanbulNow(new Date('2027-05-10T08:30:00Z'));
+    assert.deepEqual([mon.start, mon.yesterday], ['2027-05-07', '2027-05-09']);
+    const tue = istanbulNow(new Date('2027-05-11T08:30:00Z'));
+    assert.deepEqual([tue.start, tue.yesterday], ['2027-05-10', '2027-05-10']);
+    const m = buildDailySummary(st, { yesterday: mon.yesterday, start: mon.start });          // Cuma verisi yok
+    assert.match(m.subject, /08 May Cumartesi – 09 May Pazar$/);
+    assert.match(m.lines.join('\n'), /DİKKAT: Arşivde verisi olmayan gün: 07 May Cuma/);
+    assert.match(m.lines.join('\n'), /geçen hafta aynı günler \(01 May Cumartesi – 02 May Pazar\)/);
+    const t = buildDailySummary(st, { yesterday: tue.yesterday, start: tue.start });
+    assert.match(t.subject, /10 May Pazartesi$/);assert.match(t.lines.join('\n'), /geçen hafta aynı gün \(03 May Pazartesi\)/);
+    assert.ok(!/DİKKAT/.test(t.lines.join('\n')));
+  }
   const e = buildDailySummary({ rows: [], coverage: [], verified: [], rules: DEFAULT_RULES }, { yesterday: '2027-05-09' });
   assert.equal(e.hasData, false);assert.match(e.lines[0], /henüz veri yok/);
 }
 
 function seed(dir) {
   const row = (ch, date, a, dur, grp) => [ch, 'Gıda', 'Gıda', 'F', 'Ü', 'M', date, 'Normal Spot', 'Kusak Spot', a, a + dur, dur, grp, grp * dur];
-  const rows = [row('Atv', '2027-05-09', 72000, 600, 0.5), row('Atv', '2027-05-09', 73000, 600, 0.5), row('Atv', '2027-05-09', 74000, 600, 0.5),
-    row('Kanal D', '2027-05-09', 72000, 600, 0.5), row('Kanal D', '2027-05-09', 73000, 600, 0.5), row('Minor 1', '2027-05-09', 72000, 300, 0),
-    row('Atv', '2027-05-02', 72000, 600, 0.5), row('Atv', '2027-05-02', 73000, 600, 0.5)];
-  const coverage = ['Atv|2027-05-09', 'Kanal D|2027-05-09', 'Minor 1|2027-05-09', 'Atv|2027-05-02'];
+  // Pazartesi ozeti Cuma-Cumartesi-Pazar'i (07-09 May) onceki haftanin ayni gunleriyle (30 Nis - 02 May) karsilastirir
+  const cur = ['2027-05-07', '2027-05-08', '2027-05-09'], old = ['2027-04-30', '2027-05-01', '2027-05-02'];
+  const rows = [], coverage = [];
+  for (const d of cur) { rows.push(row('Atv', d, 72000, 600, 0.5), row('Atv', d, 73000, 600, 0.5), row('Atv', d, 74000, 600, 0.5), row('Kanal D', d, 72000, 600, 0.5), row('Kanal D', d, 73000, 600, 0.5)); coverage.push('Atv|' + d, 'Kanal D|' + d); }
+  rows.push(row('Minor 1', '2027-05-09', 72000, 300, 0)); coverage.push('Minor 1|2027-05-09');
+  for (const d of old) { rows.push(row('Atv', d, 72000, 600, 0.5), row('Atv', d, 73000, 600, 0.5)); coverage.push('Atv|' + d); }
   const state = { rows, coverage, verified: coverage.filter(k => k !== 'Minor 1|2027-05-09'), expectedChannels: ['Atv', 'Kanal D', 'Minor 1', 'Tv8'], rules: DEFAULT_RULES, updatedAt: '2027-05-09T20:00:00.000Z', updatedBy: 'admin' };
   fs.writeFileSync(path.join(dir, 'archive.json.gz'), zlib.gzipSync(JSON.stringify(state)));
 }
@@ -62,16 +80,16 @@ function seed(dir) {
     // 1) Pazartesi 11:30: hesabi acik ve e-postasi olan herkese, bir kez
     let m = await run({ SUMMARY_NOW_OVERRIDE: '2027-05-10T08:30:00Z' }, 1500);
     assert.deepEqual(to(m), EXPECT);
-    assert.equal(m[0].subject, '[Kanal Doluluk] Günlük özet — 09 May Pazar');
+    assert.equal(m[0].subject, '[Kanal Doluluk] Günlük özet — 07 May Cuma – 09 May Pazar');
     const t = m[0].text;
-    assert.match(t, /09 May Pazar günü/);
-    assert.match(t, /Genel doluluk: %8 — geçen hafta aynı gün \(02 May Pazar\): %9 \(−1 puan\)/);
-    assert.match(t, /1\. Atv: %13 \(\+4 puan\) · GRP 1,5/);
-    assert.match(t, /2\. Kanal D: %9 · GRP 1,0/);                                  // geçen hafta Kanal D verisi yok: fark yazilmaz
+    assert.match(t, /07 May Cuma – 09 May Pazar günleri/);
+    assert.match(t, /Genel doluluk: %10 — geçen hafta aynı günler \(30 Nis Cuma – 02 May Pazar\): %9 \(\+1 puan\)/);
+    assert.match(t, /1\. Atv: %13 \(\+4 puan\) · GRP 4,5/);
+    assert.match(t, /2\. Kanal D: %9 · GRP 3,0/);                                  // geçen hafta Kanal D verisi yok: fark yazilmaz
     assert.match(t, /Diğer 1 kanalın ortalaması: %2/);
-    assert.match(t, /GRP: 2,5 \(\+150%\) · GRPxSEC: 1\.500,0/);
-    assert.match(t, /En yüksek GRP: Atv 1,5 · Kanal D 1,0/);
-    assert.match(t, /Beklenen kanallar için bu günün verisi yok: Tv8/);
+    assert.match(t, /GRP: 7,5 \(\+150%\) · GRPxSEC: 4\.500,0/);
+    assert.match(t, /En yüksek GRP: Atv 4,5 · Kanal D 3,0/);
+    assert.match(t, /Beklenen kanallar için bu dönemin verisi yok: Tv8/);
     assert.match(t, /1 kanal-günün kapsamı doğrulanmamış/);
     assert.ok(!/DİKKAT/.test(t));assert.ok(!/20(26|27)-/.test(t),'ISO tarih/yil gorunmemeli');
     const h = m[0].html;                                                               // grafikli HTML surum
@@ -79,7 +97,7 @@ function seed(dir) {
     assert.deepEqual(m[0].cids.sort(), ['kd-growity', 'kd-time']);assert.ok(/powered by/.test(h) && /Powered by Growity AI Studio/.test(m[0].text));
     assert.ok(![...h.matchAll(/<img[^>]*src="([^"]*)"/g)].some(x => !x[1].startsWith('cid:')), 'yalniz gomulu (cid:) resim');
     assert.ok(!/<script|<link|https?:\/\/(?!example)/i.test(h.replace(/href="[^"]*"/g, '')), 'betik/dis resim olmamali');
-    for (const x of ['%8', '%13', 'Atv', 'Kanal D', 'Beklenen', '7 ana kanal', 'Saatlik doluluk', 'En yüksek GRP']) assert.ok(h.includes(x) || /Beklenen/.test(x), 'HTML: ' + x);
+    for (const x of ['%10', '%13', 'Atv', 'Kanal D', 'Beklenen', '7 ana kanal', 'Saatlik doluluk', 'En yüksek GRP']) assert.ok(h.includes(x) || /Beklenen/.test(x), 'HTML: ' + x);
     assert.ok(/bgcolor="#a8e0c4"|bgcolor="#fbd98f"|bgcolor="#f7b2c2"/.test(h), 'doluluk cubuklari renkli olmali');
     assert.ok(h.length < 100000);
     assert.equal(stateFile().last, '2027-05-10');

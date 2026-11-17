@@ -170,6 +170,8 @@ Hafta içi her gün **11:00'da (İstanbul saati)**, e-posta adresi tanımlı ve 
 
 E-posta **grafikli HTML** olarak gelir (KPI kartları ve fark etiketleri, 7 ana kanal için renkli doluluk çubukları, saatlik doluluk şeridi, GRP çubukları, uyarı kutusu, "Panele git" düğmesi); HTML göstermeyen istemciler için aynı içeriğin düz metin sürümü de eklenir. HTML, e-posta istemcilerinde güvenle görünmesi için yalnızca tablo ve satır içi stil kullanır (betik, dış resim yok).
 
+**Dönem ve karşılaştırma:** Salı–Cuma günleri özet **dünü**, geçen haftanın aynı günüyle karşılaştırır. **Pazartesi** günü veri hafta sonu toplu yüklendiği için özet **Cuma–Cumartesi–Pazar'ı (3 gün toplamı)** bir önceki haftanın Cuma–Cumartesi–Pazar'ıyla karşılaştırır. E-postanın üstünde karşılaştırılan tarihler yazar. Dönemde verisi olmayan gün varsa (ör. Cuma yüklenmemiş) bu uyarı olarak yazılır ve iki tarafta da yalnızca verisi olan günler hesaba katılır.
+
 İçerik (panelle aynı hesap çekirdeğiyle üretilir, rakamlar birebir aynıdır):
 - Genel doluluk ve **geçen haftanın aynı gününe** göre fark (puan), reklam süresi, GRP ve GRPxSEC değişimi.
 - **7 ana kanal**: doluluk (sıralı), geçen haftaya göre fark, GRP; diğer kanalların ortalaması; en yoğun ve en sakin saat; en yüksek GRP'li kanallar.
