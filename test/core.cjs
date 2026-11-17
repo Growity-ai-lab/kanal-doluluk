@@ -1,5 +1,5 @@
 const assert=require('node:assert/strict');
-const {analyze,period,DEFAULT_RULES,timePart,resolveCompare,presetRange,addMonths,daysBetween}=require('../public/core.js');
+const {analyze,period,DEFAULT_RULES,timePart,resolveCompare,presetRange,addMonths,daysBetween,dayMonth,periodLabel}=require('../public/core.js');
 const base={start:'2026-11-13',end:'2026-11-13',granularity:'day',group:'',channel:'',sector:'',firm:'',brand:'',view:'channel',hourStart:7,bands:['OPT','Erken PT','PT','Geç PT']};
 const row=(a,dur,o={})=>[o.ch||'Atv',o.sector||'Gıda','Gıda',o.firm||'F','Ü',o.brand||'M',o.date||'2026-11-13',o.type||'Normal Spot',o.detail||'Kusak Spot',a,a+dur,dur];
 const cov=['Atv|2026-11-13'];
@@ -134,4 +134,10 @@ assert.equal(pr('thisWeek','2026-11-16'),'2026-11-16 2026-11-16');assert.equal(p
 assert.equal(pr('prevWeek','2026-11-16'),'2026-11-09 2026-11-15');assert.equal(pr('prevWeek','2026-11-12'),'2026-11-02 2026-11-08');
 assert.equal(pr('thisMonth','2026-11-16'),'2026-11-01 2026-11-16');assert.equal(pr('prevMonth','2026-11-16'),'2026-10-01 2026-10-31');assert.equal(pr('prevMonth','2026-01-10'),'2025-12-01 2025-12-31');
 assert.equal(presetRange('bilinmeyen','2026-11-16'),null);
+// ---- Gorunen tarih etiketleri: yil yok, gun-ay
+assert.equal(dayMonth('2026-11-16'),'16 Kas');assert.equal(dayMonth('2026-01-05'),'05 Oca');assert.equal(dayMonth('2026-12-31'),'31 Ara');assert.equal(dayMonth(''),'');
+assert.equal(periodLabel('2026-11-16','day'),'16 Kas');assert.equal(periodLabel('2026-03-02','day'),'02 Mar');
+assert.equal(periodLabel('2026-11-09','week'),'09–15 Kas');assert.equal(periodLabel('2026-10-26','week'),'26 Eki–01 Kas');assert.equal(periodLabel('2025-12-29','week'),'29 Ara–04 Oca');
+assert.equal(periodLabel('2026-11','month'),'Kasım');assert.equal(periodLabel('2026-01','month'),'Ocak');
+for(const l of [dayMonth('2026-11-16'),periodLabel('2026-11-09','week'),periodLabel('2026-11','month')])assert.ok(!/20\d\d/.test(l),'etikette yil olmamali: '+l);
 console.log('OK: core calculation (bands, midnight, rules, coverage, share, grouping, GRP, hourly).');
