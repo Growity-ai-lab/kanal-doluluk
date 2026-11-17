@@ -174,6 +174,7 @@ E-posta **grafikli HTML** olarak gelir (KPI kartları ve fark etiketleri, 7 ana 
 **Dönem ve karşılaştırma:** Salı–Cuma günleri özet **dünü** bir önceki günle karşılaştırır (e-postada "bir önceki gün" yazar). **Pazartesi** günü veri hafta sonu toplu yüklendiği için özet **Cuma–Cumartesi–Pazar'ı (3 gün toplamı)** bir önceki haftanın Cuma–Cumartesi–Pazar'ıyla karşılaştırır ("önceki hafta"). E-postanın üstünde karşılaştırılan tarihler yazar. Dönemde verisi olmayan gün varsa (ör. Cuma yüklenmemiş) bu uyarı olarak yazılır ve iki tarafta da yalnızca verisi olan günler hesaba katılır.
 
 İçerik (panelle aynı hesap çekirdeğiyle üretilir, rakamlar birebir aynıdır):
+- **Günün öne çıkanları** (en üstte, yapay zekâsız, kural tabanlı): en çok düşen / yükselen ana kanal (±5 puan ve üzeri), doluluk ile GRP'nin ters yönde hareketi, %90 üzeri kanallar ya da en dolu kanal, yoğun saatin kayması. Belirgin değişim yoksa bunu söyler. Rakamlar e-postanın geri kalanıyla aynı hesaptan gelir.
 - Genel doluluk ve **önceki haftanın aynı gününe** göre fark (puan), reklam süresi, GRP ve GRPxSEC değişimi.
 - **7 ana kanal**: doluluk (sıralı), önceki haftaya göre fark, GRP; diğer kanalların ortalaması; en yoğun ve en sakin saat; en yüksek GRP'li kanallar.
 - **Uyarılar**: beklenen kanalın o gün verisi yok, doğrulanmamış kapsam, kapsamı olmayan kanal-gün, belirsiz tür süresi, geçersiz kayıt.
