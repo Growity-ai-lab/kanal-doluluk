@@ -60,8 +60,8 @@ assert.deepEqual(two2.matrix.map(m=>m.unverified),[0,1]);
 assert.equal(analyze([row(64800,30)],base,cov,DEFAULT_RULES).unverified,0); // dogrulama takibi yoksa sayilmaz
 
 // ---- GRP: bant sinirinda sureye orantili dagitilir; sure yoksa bitis-baslangic; hariç/belirsiz türler GRP'ye girmez
-const rowG=(a,dur,grp,o={})=>[o.ch||'Atv',o.sector||'Gıda','Gıda',o.firm||'F','Ü',o.brand||'M',o.date||'2026-11-13',o.type||'Normal Spot',o.detail||'Kusak Spot',a,a+dur,o.nodur?null:dur,grp];
-const edge=rowG(17*3600+59*60+30,60,0.6); // 17:59:30-18:00:30: 30 sn OPT, 30 sn Erken PT
+const rowG=(a,dur,grp,o={})=>[o.ch||'Atv',o.sector||'Gıda','Gıda',o.firm||'F','Ü',o.brand||'M',o.date||'2026-11-13',o.type||'Normal Spot',o.detail||'Kusak Spot',a,a+dur,o.nodur?null:dur,grp,...(o.grpx===undefined?[]:[o.grpx])];
+const edge=rowG(17*3600+59*60+30,60,0.6,{grpx:36}); // 17:59:30-18:00:30: 30 sn OPT, 30 sn Erken PT; GRPxSURE = 0,6 x 60
 const near=(x,y)=>assert.ok(Math.abs(x-y)<1e-9,x+' != '+y);
 let g=run([edge],{bands:['OPT']});near(g.grp,0.3);near(g.list[0].grp,0.3);assert.equal(g.hasGrp,true);
 near(run([edge],{bands:['Erken PT']}).grp,0.3);near(run([edge]).grp,0.6);
@@ -75,11 +75,23 @@ near(run([rowG(64800,30,0.5),rowG(64830,30,0.25,{date:'2026-11-12'})]).grp,0.5);
 const v2=run([rowG(64800,30,0.4,{firm:'X'}),rowG(64830,30,0.1,{firm:'X'}),rowG(64860,30,0.3,{firm:'Y'})],{view:'firm'});
 near(v2.list.find(x=>x.name==='X').grp,0.5);near(v2.list.find(x=>x.name==='Y').grp,0.3);
 
+// ---- GRPxSEC: ADEX 'GRPxSURE' degeri aynen (pencereye orantili); sutun yoksa GRP x sure
+let gx=run([edge],{bands:['OPT']});near(gx.grpx,18);near(gx.list[0].grpx,18);near(run([edge],{bands:['Erken PT']}).grpx,18);near(run([edge]).grpx,36);
+near(run([rowG(64800,30,0.5)]).grpx,15);                                    // grpxsec yok: 0,5 x 30
+near(run([rowG(64800,30,0.5,{nodur:true})]).grpx,15);                       // sure yoksa bitis-baslangic
+near(run([rowG(64800,30,0.5,{grpx:99})]).grpx,99);                          // ADEX degeri oldugu gibi kullanilir
+near(run([rowG(64800,30,null,{grpx:7})]).grpx,7);assert.equal(run([rowG(64800,30,null,{grpx:7})]).hasGrp,true);
+near(run([rowG(64800,30,0.5,{type:'Sponsorluk',detail:'Sponsor Sundu',grpx:15}),rowG(64830,30,0.2,{grpx:6})]).grpx,6);   // hariç tür girmez
+const gxv=run([rowG(64800,30,0.4,{firm:'X',grpx:12}),rowG(64830,30,0.1,{firm:'X',grpx:3}),rowG(64860,30,0.3,{firm:'Y',grpx:9})],{view:'firm'});
+near(gxv.list.find(x=>x.name==='X').grpx,15);near(gxv.list.find(x=>x.name==='Y').grpx,9);
+
 // ---- Saatlik kirilim: saniye, GRP ve kapasite saat/kanal bazinda
 const hv=run([edge,rowG(20*3600+10,20,0.2)]);
 const H=Object.fromEntries(hv.hourly.map(x=>[x.key,x]));
 assert.equal(H['Atv|17'].seconds,30);assert.equal(H['Atv|18'].seconds,30);assert.equal(H['Atv|20'].seconds,20);
 near(H['Atv|17'].grp,0.3);near(H['Atv|18'].grp,0.3);near(H['Atv|20'].grp,0.2);
+near(H['Atv|17'].grpx,18);near(H['Atv|18'].grpx,18);near(H['Atv|20'].grpx,4);                  // 0,2 x 20 (grpxsec yok -> hesaplanir)
+near(hv.hourly.reduce((t,x)=>t+x.grpx,0),hv.grpx);near(hv.hourly.reduce((t,x)=>t+x.grp,0),hv.grp);   // saatlik toplamlar genel toplama esit
 assert.equal(H['Atv|17'].capacity,720);assert.equal(H['Atv|7'].capacity,720);assert.equal(H['Atv|25'].capacity,720);
 assert.deepEqual(hv.hours,[7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25]);
 assert.equal(hv.hourly.reduce((t,x)=>t+x.capacity,0),hv.capacity);                              // saatlik kapasite toplami genel kapasiteye esit

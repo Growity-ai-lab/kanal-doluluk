@@ -21,9 +21,9 @@ console.log('OK: calculation and Excel workbook with both charts.');
   new vm.Script(fs.readFileSync(require.resolve('../public/core.js'),'utf8')).runInContext(ctx2);
   new vm.Script(script).runInContext(ctx2);
   ctx2.inputRows=[
-    ['Atv','Gıda','Gıda','Firma A','Ürün','Marka A','2026-11-13','Normal Spot','Kusak Spot',64800,64830,30,0.6],       // 18:00 (Erken PT)
-    ['Atv','Gıda','Gıda','Firma B','Ürün','Marka B','2026-11-13','Normal Spot','Kusak Spot',36000,36020,20,0.1],       // 10:00 (OPT)
-    ['Atv','Gıda','Gıda','Firma A','Ürün','Marka A','2026-11-06','Normal Spot','Kusak Spot',64800,64815,15,0.2]];      // onceki hafta
+    ['Atv','Gıda','Gıda','Firma A','Ürün','Marka A','2026-11-13','Normal Spot','Kusak Spot',64800,64830,30,0.6,18],       // 18:00 (Erken PT)
+    ['Atv','Gıda','Gıda','Firma B','Ürün','Marka B','2026-11-13','Normal Spot','Kusak Spot',36000,36020,20,0.1,2],       // 10:00 (OPT)
+    ['Atv','Gıda','Gıda','Firma A','Ürün','Marka A','2026-11-06','Normal Spot','Kusak Spot',64800,64815,15,0.2,3]];      // onceki hafta
   const out=new vm.Script(`(()=>{const mk=(view,s,e)=>({start:s,end:e,granularity:'day',group:'',channel:'',sector:'',firm:'',brand:'',view,hourStart:7,bands:['OPT','Erken PT','PT','Geç PT']});
     const cov=['Atv|2026-11-13','Atv|2026-11-06'];const res={};
     for(const view of ['channel','brand']){const f=mk(view,'2026-11-13','2026-11-13'),f2=mk(view,'2026-11-06','2026-11-06');
@@ -33,14 +33,16 @@ console.log('OK: calculation and Excel workbook with both charts.');
     return res;})()`).runInContext(ctx2);
   for(const view of ['channel','brand']){
     const wbk=XLSX.read(out[view],{type:'array'});
-    assert.ok(['Saatlik doluluk','Saatlik GRP','Karşılaştırma','Sonuçlar'].every(n=>wbk.SheetNames.includes(n)),view+': '+wbk.SheetNames);
+    assert.ok(['Saatlik doluluk','Saatlik GRP','Saatlik GRPxSEC','Karşılaştırma','Sonuçlar'].every(n=>wbk.SheetNames.includes(n)),view+': '+wbk.SheetNames);
     const sheet=n=>XLSX.utils.sheet_to_json(wbk.Sheets[n],{header:1,defval:null});
     const hourly=sheet('Saatlik doluluk'),hdr=hourly[0],row=hourly.find(r=>r[0]==='Atv');
     assert.equal(row[hdr.indexOf('18:00')],30/720);assert.equal(row[hdr.indexOf('10:00')],20/720);assert.equal(hdr.at(-1),'25:00');
     const g=sheet('Saatlik GRP'),grow=g.find(r=>r[0]==='Atv');assert.equal(grow[g[0].indexOf('18:00')],0.6);assert.equal(grow[g[0].indexOf('10:00')],0.1);
-    const res=sheet('Sonuçlar');assert.deepEqual(res[0].slice(-2),['GRP','GRP / 100 sn']);
+    const res=sheet('Sonuçlar');assert.deepEqual(res[0].slice(-2),['GRP','GRPxSEC']);const ar=res.find(r=>r[0]==='Atv'||r[0]==='Marka A');assert.equal(ar[ar.length-1]>0,true);
     const cmp=sheet('Karşılaştırma');assert.equal(cmp[2][1],'2026-11-06');
     assert.equal(cmp.find(r=>r[0]==='Reklam süresi (sn)')[1],50);assert.equal(cmp.find(r=>r[0]==='Reklam süresi (sn)')[2],15);   // 30+20 vs 15
+    const gxs=sheet('Saatlik GRPxSEC'),gxr=gxs.find(r=>r[0]==='Atv');assert.equal(gxr[gxs[0].indexOf('18:00')],18);assert.equal(gxr[gxs[0].indexOf('10:00')],2);
+    assert.equal(cmp.find(r=>r[0]==='GRPxSEC')[1],20);assert.equal(cmp.find(r=>r[0]==='GRPxSEC')[2],3);
     assert.equal(Math.round(cmp.find(r=>r[0]==='GRP')[1]*100)/100,0.7);assert.equal(Math.round(cmp.find(r=>r[0]==='GRP')[2]*100)/100,0.2);
   }
   const nb=XLSX.read(out.nocmp,{type:'array'});assert.ok(!nb.SheetNames.includes('Karşılaştırma'));assert.ok(nb.SheetNames.includes('Saatlik doluluk'));
