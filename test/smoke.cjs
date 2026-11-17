@@ -27,7 +27,7 @@ async function start(){
  throw Error('Server did not start');
 }
 async function stop(){if(proc&&proc.exitCode===null&&proc.signalCode===null){proc.kill();await once(proc,'exit');}}
-const post=(p,auth,body,header=true)=>req(p,auth,{method:'POST',body,headers:header?{'X-Panel-Request':'1'}:{}});
+const post=(p,auth,body,header=true,force=true)=>req(force&&p.startsWith('/api/import')&&!p.includes('force=')?p+(p.includes('?')?'&':'?')+'force=1':p,auth,{method:'POST',body,headers:header?{'X-Panel-Request':'1'}:{}});   // eski testler uyari onayini otomatik verir; uyari akisi asagida ayri sinanir
 const fake=createFakeSmtp();
 (async()=>{
  Object.assign(env,{SMTP_HOST:'127.0.0.1',SMTP_PORT:String(await fake.listen()),SMTP_TLS:'none',SMTP_USER:fake.user,SMTP_PASSWORD:fake.password,MAIL_FROM:'Kanal Doluluk <bildirim@example.com>',NOTIFY_EMAILS:'ops@example.com'});
@@ -511,5 +511,16 @@ const fake=createFakeSmtp();
    assert.equal(sample.status,200,await sample.clone().text());
    console.log('OK: supplied ADEX workbook accepted.');
  }
- console.log('OK: access controls, Excel import, Monday date validation, replacement, rules, persistence after restart.');
+  { // yukleme oncesi uyari: GRP sutunu yok -> 409 + uyari, hicbir sey yazilmaz; force=1 ile yazilir
+   const before=(await (await req('/api/state',admin)).json()).rows.length;
+   const w=await post('/api/import?mode=append&start=&end=&complete=0',admin,book(['2026-12-27'],30),true,false);
+   const wj=await w.json();
+   assert.equal(w.status,409);assert.equal(wj.needsConfirm,true);assert.ok(wj.warnings.some(x=>/GRP/.test(x)),'GRP uyarisi: '+wj.warnings);
+   assert.equal((await (await req('/api/state',admin)).json()).rows.length,before,'onaylanmadan yazilmamali');
+   const ok=await post('/api/import?mode=append&start=&end=&complete=0&force=1',admin,book(['2026-12-27'],30),true,false);
+   const okj=await ok.json();assert.equal(ok.status,200,JSON.stringify(okj));
+   const after=(await (await req('/api/state',admin)).json()).rows.length;assert.ok(after>before,'before '+before+' after '+after+' '+JSON.stringify(okj));
+ }
+
+console.log('OK: access controls, Excel import, Monday date validation, replacement, rules, persistence after restart.');
 })().catch(e=>{console.error(e);process.exitCode=1;}).finally(async()=>{await stop();await fake.close();fs.rmSync(data,{recursive:true,force:true});});

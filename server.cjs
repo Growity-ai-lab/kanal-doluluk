@@ -197,6 +197,18 @@ function parseInThread(body,options) {
     thread.once('exit',code=>finish(reject,bad('Dosya islenemedi (islem beklenmedik sekilde kapandi).',500)));
   });
 }
+// Yukleme oncesi kontrol: eksik GRP, eksik gun/kanal, aralik yenilemede veri azalmasi. Bos donerse uyari yoktur.
+function importWarnings(r) {
+  const out=[],n0=new Intl.NumberFormat('tr-TR',{maximumFractionDigits:0}).format,dm=core.dayMonth;
+  if(!r) return out;
+  if(!r.hasGrpCol) out.push('Dosyada GRP / GRPxSEC sütunu yok; bu günlerin GRP verisi boş kalır'+(r.archiveHasGrp?' (arşivdeki diğer günlerde GRP var).':'.'));
+  else if(r.grpRows<r.total*0.98) out.push(n0(r.total-r.grpRows)+' kayıtta (%'+n0((r.total-r.grpRows)/r.total*100)+') GRP değeri boş.');
+  if(r.gapDays.length) out.push('Dosyada hiç verisi olmayan gün: '+r.gapDays.slice(0,8).map(dm).join(', ')+(r.gapDays.length>8?' ve '+(r.gapDays.length-8)+' gün daha':'')+'.');
+  if(r.absent.length) out.push('Beklenen kanallar dosyada yok: '+r.absent.slice(0,10).join(', ')+'.');
+  if(r.partial.length) out.push(n0(r.partial.length)+' kanal-gün için veri yok (örn. '+r.partial.slice(0,4).map(k=>k.slice(0,k.lastIndexOf('|'))+' '+dm(k.slice(k.lastIndexOf('|')+1))).join(', ')+').');
+  if(r.replaceRemoved>0&&r.total<r.replaceRemoved*0.8) out.push('Dönemi yenile: aralıktaki '+n0(r.replaceRemoved)+' mevcut kayıt silinip yerine '+n0(r.total)+' kayıt yazılacak (veri azalıyor).');
+  return out;
+}
 async function parseImport(body,options) {
   const fresh = await parseInThread(body,options);
   let result;
@@ -476,10 +488,15 @@ http.createServer(async(req,res)=>{
         if(body.length<4||body.readUInt32LE(0)!==0x04034b50) throw bad('Gecerli bir XLSX dosyasi secin.');
         return await exclusive(async()=>{
           let m;
-          try {m=await parseImport(body,{mode,start,end,requireDays:machine,expected:machine?state.expectedChannels:[],complete:!machine&&url.searchParams.get('complete')==='1'});}
+          try {m=await parseImport(body,{mode,start,end,requireDays:machine,expected:machine?state.expectedChannels:[],checkExpected:state.expectedChannels,complete:!machine&&url.searchParams.get('complete')==='1'});}
           catch(err) {auth.audit('import-rejected',ctx,{mode,start,end,bytes:body.length,reason:String(err.message).slice(0,200)});if(machine)notify('import-rejected',supers(),'Otomatik veri aktarımı REDDEDİLDİ',['Windows otomatik aktarımı şu nedenle reddedildi:',String(err.message).slice(0,300),'','Aralık: '+start+' - '+end,'Arşive hiçbir şey yazılmadı. ADEX dosyasını ve betik günlüğünü kontrol edin.']);throw err;}
+          const warnings=importWarnings(m.report);
+          if(warnings.length&&!machine&&url.searchParams.get('force')!=='1') {
+            auth.audit('import-warned',ctx,{mode,start,end,bytes:body.length,warnings});
+            return send(res,409,{needsConfirm:true,warnings,error:'Dosyada eksik veya şüpheli veri var: '+warnings.join(' ')});
+          }
           await save({...state,rows:m.rows,coverage:m.coverage,verified:m.verified,updatedAt:new Date().toISOString(),updatedBy:who.username},machine?'import-auto':'import-'+mode);
-          auth.audit('import',ctx,{mode,start,end,complete:!machine&&url.searchParams.get('complete')==='1',bytes:body.length,added:m.added,updated:m.updated,skipped:m.skipped,total:m.rows.length,missingChannels:m.missingChannels});
+          auth.audit('import',ctx,{mode,start,end,complete:!machine&&url.searchParams.get('complete')==='1',bytes:body.length,added:m.added,updated:m.updated,skipped:m.skipped,total:m.rows.length,missingChannels:m.missingChannels,warnings,forced:!machine&&warnings.length>0});
           const retWarn=retentionWarning();
           notify(machine?'import-auto':'import',managers(machine?'':who.username),machine?'Otomatik veri aktarımı tamamlandı':'Yeni veri yüklendi',[
             (machine?'Otomatik aktarım (Windows)':who.username+' (panel)')+' veri yükledi.','',
@@ -487,6 +504,7 @@ http.createServer(async(req,res)=>{
             'Eklenen: '+m.added+' · Güncellenen: '+m.updated+' · Atlanan (tekrar): '+m.skipped,
             'Arşivde toplam: '+m.rows.length+' kayıt',
             ...(m.missingChannels&&m.missingChannels.length?['','UYARI: dosyada eksik kanallar: '+m.missingChannels.join('; ')]:[]),
+            ...(warnings.length?['',(machine?'UYARI':'UYARI (yükleyen onayladı)')+':',...warnings.map(w=>'- '+w)]:[]),
             ...(retWarn?['','UYARI: '+retWarn]:[])]);
           return send(res,200,{added:m.added,updated:m.updated,skipped:m.skipped,total:m.rows.length,missingChannels:m.missingChannels,warning:retWarn});
         });

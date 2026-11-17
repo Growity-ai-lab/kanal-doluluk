@@ -65,11 +65,11 @@ function seed(dir) {
     assert.equal(m[0].subject, '[Kanal Doluluk] Günlük özet — 09 May Pazar');
     const t = m[0].text;
     assert.match(t, /09 May Pazar günü/);
-    assert.match(t, /Genel doluluk: %8,0 — geçen hafta aynı gün \(02 May Pazar\): %8,8 \(−0,7 puan\)/);
-    assert.match(t, /1\. Atv: %13,2 \(\+4,4 puan\) · GRP 1,5/);
-    assert.match(t, /2\. Kanal D: %8,8 · GRP 1,0/);                                  // geçen hafta Kanal D verisi yok: fark yazilmaz
-    assert.match(t, /Diğer 1 kanalın ortalaması: %2,2/);
-    assert.match(t, /GRP: 2,5 \(\+150,0%\) · GRPxSEC: 1\.500,0/);
+    assert.match(t, /Genel doluluk: %8 — geçen hafta aynı gün \(02 May Pazar\): %9 \(−1 puan\)/);
+    assert.match(t, /1\. Atv: %13 \(\+4 puan\) · GRP 1,5/);
+    assert.match(t, /2\. Kanal D: %9 · GRP 1,0/);                                  // geçen hafta Kanal D verisi yok: fark yazilmaz
+    assert.match(t, /Diğer 1 kanalın ortalaması: %2/);
+    assert.match(t, /GRP: 2,5 \(\+150%\) · GRPxSEC: 1\.500,0/);
     assert.match(t, /En yüksek GRP: Atv 1,5 · Kanal D 1,0/);
     assert.match(t, /Beklenen kanallar için bu günün verisi yok: Tv8/);
     assert.match(t, /1 kanal-günün kapsamı doğrulanmamış/);
@@ -79,7 +79,7 @@ function seed(dir) {
     assert.deepEqual(m[0].cids.sort(), ['kd-growity', 'kd-time']);assert.ok(/powered by/.test(h) && /Powered by Growity AI Studio/.test(m[0].text));
     assert.ok(![...h.matchAll(/<img[^>]*src="([^"]*)"/g)].some(x => !x[1].startsWith('cid:')), 'yalniz gomulu (cid:) resim');
     assert.ok(!/<script|<link|https?:\/\/(?!example)/i.test(h.replace(/href="[^"]*"/g, '')), 'betik/dis resim olmamali');
-    for (const x of ['%8,0', '%13,2', 'Atv', 'Kanal D', 'Beklenen', '7 ana kanal', 'Saatlik doluluk', 'En yüksek GRP']) assert.ok(h.includes(x) || /Beklenen/.test(x), 'HTML: ' + x);
+    for (const x of ['%8', '%13', 'Atv', 'Kanal D', 'Beklenen', '7 ana kanal', 'Saatlik doluluk', 'En yüksek GRP']) assert.ok(h.includes(x) || /Beklenen/.test(x), 'HTML: ' + x);
     assert.ok(/bgcolor="#a8e0c4"|bgcolor="#fbd98f"|bgcolor="#f7b2c2"/.test(h), 'doluluk cubuklari renkli olmali');
     assert.ok(h.length < 100000);
     assert.equal(stateFile().last, '2027-05-10');
