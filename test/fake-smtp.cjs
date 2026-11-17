@@ -15,7 +15,17 @@ function createFakeSmtp(opts = {}) {
       const [head, ...rest] = data.split('\r\n\r\n'), body = rest.join('\r\n\r\n');
       const unfolded = head.replace(/\r\n[ \t]+/g, ' ');
       const h = n => { const m = new RegExp('^' + n + ': (.*)$', 'mi').exec(unfolded); return m ? m[1] : ''; };
-      mails.push({ from, to: rcpt[0], subject: decodeWord(h('Subject')), text: Buffer.from(body.replace(/\r\n/g, ''), 'base64').toString('utf8'), head, encrypted: !!sock.encrypted, headerNames: unfolded.split('\r\n').map(l => l.split(':')[0]) });
+      const ct = h('Content-Type'), bm = /boundary="([^"]+)"/.exec(ct);
+      const dec = b => Buffer.from(b.replace(/\r\n/g, ''), 'base64').toString('utf8');
+      let text = '', html = '';
+      if (bm) {   // multipart/alternative
+        for (const part of body.split('--' + bm[1]).slice(1)) {
+          if (part.startsWith('--')) break;
+          const [ph, ...pb] = part.replace(/^\r\n/, '').split('\r\n\r\n'), payload = pb.join('\r\n\r\n');
+          if (/text\/plain/i.test(ph)) text = dec(payload); else if (/text\/html/i.test(ph)) html = dec(payload);
+        }
+      } else text = dec(body);
+      mails.push({ from, to: rcpt[0], subject: decodeWord(h('Subject')), text, html, multipart: !!bm, head, encrypted: !!sock.encrypted, headerNames: unfolded.split('\r\n').map(l => l.split(':')[0]) });
     };
     const onData = d => {
       buf += d.toString('utf8');
