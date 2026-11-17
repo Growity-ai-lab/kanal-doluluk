@@ -87,7 +87,7 @@ function seed(dir) {
     assert.match(t, /1\. Atv: %13 \(\+4 puan\) · GRP 4,5/);
     assert.match(t, /2\. Kanal D: %9 · GRP 3,0/);                                  // geçen hafta Kanal D verisi yok: fark yazilmaz
     assert.match(t, /Diğer 1 kanalın ortalaması: %2/);
-    assert.match(t, /GRP: 7,5 \(\+150%\) · GRPxSEC: 4\.500,0/);
+    assert.match(t, /GRP: 7,5 \(\+%150\) · GRPxSEC: 4\.500,0/);
     assert.match(t, /En yüksek GRP: Atv 4,5 · Kanal D 3,0/);
     assert.match(t, /Beklenen kanallar için bu dönemin verisi yok: Tv8/);
     assert.match(t, /1 kanal-günün kapsamı doğrulanmamış/);

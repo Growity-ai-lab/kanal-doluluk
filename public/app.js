@@ -123,7 +123,7 @@ $('reqTable').onclick=e=>{let d=e.target.dataset;if(d.approve){if(confirm('Bu si
 const viewNames={channel:'Kanal',firm:'Reklamveren',brand:'Marka',sector:'Ana sektör'};
 const num1=n=>new Intl.NumberFormat('tr-TR',{minimumFractionDigits:1,maximumFractionDigits:1}).format(n);
 function comparePeriod(f){let r=resolveCompare(f.start,f.end,$('compare').value,{start:$('cmpStart').value,end:$('cmpEnd').value});return r?{...f,start:r.start,end:r.end,note:r.note}:null;}
-function deltaHtml(cur,prev,kind){if(prev==null||cur==null||!Number.isFinite(prev)||!Number.isFinite(cur)||(kind==='pct'&&prev===0))return '<span class="flat">—</span>';let d=kind==='pp'?(cur-prev)*100:(cur-prev)/prev*100,cls=Math.abs(d)<0.5?'flat':d>0?'up':'down';return '<span class="'+cls+'">'+(d>=0.5?'+':d<=-0.5?'−':'')+fmt(Math.abs(d))+(kind==='pp'?' puan':'%')+'</span>';}
+function deltaHtml(cur,prev,kind){if(prev==null||cur==null||!Number.isFinite(prev)||!Number.isFinite(cur)||(kind==='pct'&&prev===0))return '<span class="flat">—</span>';let d=kind==='pp'?Math.round(cur*100)-Math.round(prev*100):(cur-prev)/prev*100,cls=Math.abs(d)<0.5?'flat':d>0?'up':'down';return '<span class="'+cls+'">'+(d>=0.5?'+':d<=-0.5?'−':'')+(kind==='pp'?fmt(Math.abs(d))+' puan':'%'+fmt(Math.abs(d)))+'</span>';}
 function htmlTable(headers,data){return '<table><thead><tr>'+headers.map(x=>'<th>'+esc(x)+'</th>').join('')+'</tr></thead><tbody>'+data.map(r=>'<tr>'+r.map(x=>'<td>'+x+'</td>').join('')+'</tr>').join('')+'</tbody></table>';}
 const hourLabel=h=>String(h).padStart(2,'0')+':00';
 $('compare').onchange=()=>{for(let id of ['cmpStartWrap','cmpEndWrap'])$(id).classList.toggle('hidden',$('compare').value!=='custom');refresh();};$('cmpStart').onchange=refresh;$('cmpEnd').onchange=refresh;
