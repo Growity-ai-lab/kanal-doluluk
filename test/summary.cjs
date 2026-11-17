@@ -22,6 +22,20 @@ const PORT = 18360, base = 'http://localhost:' + PORT;
   assert.deepEqual([t.date, t.dow, t.minutes, t.yesterday], ['2027-05-10', 1, 630, '2027-05-09']);
   const late = istanbulNow(new Date('2027-05-09T21:30:00Z'));                      // Istanbul'da ertesi gun 00:30 (Pazartesi)
   assert.deepEqual([late.date, late.dow, late.minutes], ['2027-05-10', 1, 30]);
+  { // gunun one cikanlari
+    const mk = (ch, d, n) => Array.from({ length: n }, (_, i) => [ch, 'G', 'G', 'F', 'Ü', 'M', d, 'Normal Spot', 'Kusak Spot', 28800 + i * 1800, 28800 + i * 1800 + 600, 600, 0.2, 120]);
+    const rows = [...mk('Atv', '2027-05-12', 11), ...mk('Atv', '2027-05-11', 2), ...mk('Kanal D', '2027-05-12', 2), ...mk('Kanal D', '2027-05-11', 11), ...mk('Now', '2027-05-12', 6), ...mk('Now', '2027-05-11', 6)];
+    const cov = ['Atv', 'Kanal D', 'Now'].flatMap(c => ['2027-05-11', '2027-05-12'].map(d => c + '|' + d));
+    const r = buildDailySummary({ rows, coverage: cov, verified: cov, rules: DEFAULT_RULES, expectedChannels: [] }, { yesterday: '2027-05-12' });
+    const t = r.lines.join('\n');
+    assert.match(t, /Günün öne çıkanları:\r?\n• En çok düşen ana kanal: Kanal D −\d+ puan \(%9\)/);
+    assert.match(t, /• En çok yükselen ana kanal: Atv \+\d+ puan \(%48\)/);
+    assert.match(t, /• En dolu ana kanal: Atv %48/);
+    assert.ok(r.html.includes('Günün öne çıkanları') && r.html.includes('En çok düşen ana kanal'));
+    assert.ok(t.indexOf('Günün öne çıkanları') < t.indexOf('Genel doluluk'));
+    const flat = buildDailySummary({ rows: [...mk('Atv', '2027-05-12', 6), ...mk('Atv', '2027-05-11', 6)], coverage: ['Atv|2027-05-11', 'Atv|2027-05-12'], verified: ['Atv|2027-05-11', 'Atv|2027-05-12'], rules: DEFAULT_RULES, expectedChannels: [] }, { yesterday: '2027-05-12' });
+    assert.match(flat.lines.join('\n'), /Ana kanallarda belirgin değişim yok/);
+  }
   { // ADMIN_EMAIL: acil durum hesabinin bildirim adresi
     const d = fs.mkdtempSync(path.join(os.tmpdir(), 'ozet-auth-'));
     const au = createAuth({ dir: d, adminPassword: 'a'.repeat(24), adminEmail: 'kurucu@example.com' });
