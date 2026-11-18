@@ -182,6 +182,8 @@ E-posta **grafikli HTML** olarak gelir (KPI kartları ve fark etiketleri, 7 ana 
 
 Zamanlama: sunucu her dakika kontrol eder; özet o gün bir kez gönderilir (durum `summary-state.json` içinde saklanır, yeniden başlatma tekrar göndermez). Sunucu 11:00'da kapalıysa, açıldığında **3 saat içinde** yetişir. Gönderim başarısız olursa işaretlenmez; 10 dakika arayla en fazla 3 kez denenir ve hata denetim kaydına `E-posta gönderilemedi` olarak yazılır. Gönderim denetim kaydında `Günlük özet gönderildi` olarak görünür. **Kullanıcılar** ekranındaki **Günlük özeti bana gönder** düğmesi (Süper-yönetici) özeti yalnızca kendi adresinize anında gönderir; tasarımı denemek için kullanın; yanındaki **Önizle** bağlantısı aynı e-postayı göndermeden tarayıcıda açar.
 
+**Açılış tarihi:** Panel açıldığında rapor başlangıcı içinde bulunulan ayın 1'idir (arşivdeki ilk veri tarihi değil); bitiş, tamamlanmış son gündür. Ayın 1'inde veya son veri önceki aydaysa başlangıç, o son verinin ayının 1'i olur, böylece aralık boş kalmaz. Tarihleri yine elle ya da hızlı dönem listesinden değiştirebilirsiniz.
+
 ## Yükleme öncesi kontrol
 
 Panelden Excel yüklerken dosya kaydedilmeden önce kontrol edilir. Şunlardan biri varsa **hiçbir şey yazılmaz**; uyarılar listelenir ve "Yine de yüklemek istiyor musunuz?" diye sorulur (Tamam derseniz dosya aynı seçeneklerle yüklenir):
