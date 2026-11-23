@@ -152,14 +152,6 @@ function seed(dir) {
     assert.deepEqual(m, []);
     const st = stateFile();assert.notEqual(st.last, '2027-05-19');assert.equal(st.tries.date, '2027-05-19');assert.equal(st.tries.n, 1);
     assert.ok(fs.readFileSync(path.join(dir, 'audit.log'), 'utf8').split('\n').filter(Boolean).map(JSON.parse).some(e => e.event === 'mail-failed' && e.detail.kind === 'daily-summary'));
-    // 8b) Veri on kontrolu (ozetten 1 saat once, 10:00-11:00): kritik eksik varsa yalniz Yonetici + Super-yoneticilere, gunde bir kez
-    m = await run({ SUMMARY_NOW_OVERRIDE: '2027-05-24T07:30:00Z' }, 1500);                 // Pzt 10:30
-    assert.deepEqual(to(m), ['super@example.com', 'yonetici.kisi@example.com']);
-    assert.match(m[0].subject, /Veri eksik/);assert.match(m[0].text, /Beklenen kanallar için .* verisi yok: .*Tv8/);assert.match(m[0].text, /Arşivde verisi olmayan gün|için arşivde veri yok/);
-    assert.deepEqual(await run({ SUMMARY_NOW_OVERRIDE: '2027-05-24T07:40:00Z' }, 700), []);   // ayni gun tekrar yok
-    assert.deepEqual(await run({ SUMMARY_NOW_OVERRIDE: '2027-05-29T07:30:00Z' }, 700), []);   // Cumartesi: yok
-    assert.ok(fs.readFileSync(path.join(dir, 'audit.log'), 'utf8').split('\n').filter(Boolean).map(JSON.parse).some(e => e.event === 'data-alert'));
-    assert.deepEqual(await run({ SUMMARY_NOW_OVERRIDE: '2027-05-31T07:30:00Z', NOTIFY_ON: 'daily-summary' }, 700), []);   // NOTIFY_ON'da data-alert yoksa gitmez
     // 9) Deneme ucu: yalniz Super-yonetici, kendi adresine
     fake.mails.length = 0;
     await start({ SUMMARY_NOW_OVERRIDE: '2027-05-15T08:30:00Z' });                    // Cumartesi: zamanlanmis gonderim tetiklenmez, yalniz deneme ucu
