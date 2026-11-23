@@ -26,3 +26,23 @@ textarea{resize:vertical;font:inherit;min-height:70px}.badge{display:inline-bloc
 #matrix tbody tr:nth-child(even) td.matrix-label,#hourTable tbody tr:nth-child(even) td.matrix-label{background:#f5f8fe}
 
 header .brand{display:flex;align-items:center;gap:18px}.logo{height:40px;width:auto;display:block}.poweredby{display:flex;align-items:center;justify-content:center;gap:10px;margin:8px 0 28px;font-size:12px;color:var(--muted)}.poweredby img{height:16px;width:auto;display:block}@media(max-width:850px){header .brand{flex-direction:column;align-items:flex-start;gap:10px}}
+/* --- Panel görsel katmanı (durum paleti, kartlar, menü, çubuk ve trend grafikleri) --- */
+.filters{grid-template-columns:repeat(6,1fr)}.extra .filters{grid-template-columns:repeat(4,1fr)}
+.cmp-row{grid-template-columns:repeat(2,1fr)}.cmp-row:not(:has(label:not(.hidden))){display:none}
+.cards{grid-template-columns:repeat(4,1fr)}.cards .card:nth-child(n+3){display:block}.cards .card:nth-child(n+5){display:none}
+.card .spark{height:34px;margin-top:10px}.card .spark svg{width:100%;height:34px;display:block}
+.card:first-child .up,.card:first-child .down,.card:first-child .flat{color:#fff}
+button.outline{background:#fff;color:var(--blue);border:1px solid var(--blue)}button.outline:disabled{opacity:.5}
+header .actions{align-items:center;gap:8px}
+.menu{position:relative}
+.dd{position:absolute;right:0;top:calc(100% + 8px);background:#fff;border:1px solid var(--line);border-radius:12px;box-shadow:0 12px 30px #1726421f;padding:6px;min-width:220px;z-index:30;display:flex;flex-direction:column;gap:2px}
+.dd button{border:0;background:none;text-align:left;border-radius:8px;padding:9px 12px;width:100%}.dd button:hover,.dd button:focus-visible{background:#f2f5fa}.dd button[hidden]{display:none}
+.hlegend{display:flex;flex-wrap:wrap;gap:14px;font-size:12px;color:var(--muted);margin:0 0 10px}.hlegend i{display:inline-block;width:11px;height:11px;border-radius:3px;margin-right:6px;vertical-align:-1px}.hlegend i.tickkey{width:2px;height:13px;border-radius:2px;background:var(--ink);opacity:.55;margin-right:7px}
+.hbars{display:flex;flex-direction:column;gap:10px}.hb{display:grid;grid-template-columns:96px minmax(0,1fr) 150px;gap:12px;align-items:center;font-size:13px}.hb>b{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.htrack{position:relative;height:24px;border-radius:7px;background:linear-gradient(90deg,transparent 69.8%,#c3cde0 69.8%,#c3cde0 70.2%,transparent 70.2%,transparent 89.8%,#c3cde0 89.8%,#c3cde0 90.2%,transparent 90.2%),#eef2f8}
+.hfill{height:100%;border-radius:7px}.hprev{position:absolute;top:-3px;width:2px;height:30px;background:var(--ink);opacity:.55;border-radius:2px}
+.hval{text-align:right;white-space:nowrap}.hhead{margin-bottom:-4px}.hscale{position:relative;height:12px;font-size:10px;color:var(--muted)}.hscale em{position:absolute;transform:translateX(-50%);font-style:normal}
+.split.single{grid-template-columns:1fr}#trend svg{height:auto;max-height:320px}.trend-note{margin:8px 0 0}
+@media(max-width:1100px){.filters{grid-template-columns:repeat(3,1fr)}.cards{grid-template-columns:repeat(2,1fr)}}
+@media(max-width:850px){.filters{grid-template-columns:repeat(2,1fr)}.extra .filters{grid-template-columns:repeat(2,1fr)}.hb{grid-template-columns:78px minmax(0,1fr) 120px}}
+#cmpCards{display:none}
