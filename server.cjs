@@ -18,7 +18,7 @@ const auth = createAuth({dir,adminPassword:secrets[0],adminEmail:env.ADMIN_EMAIL
 // E-posta bildirimi (SMTP_HOST/SMTP_PORT/SMTP_USER/SMTP_PASSWORD/MAIL_FROM tanimliysa acik). Gonderim hatalari istegi bozmaz; denetim kaydina yazilir.
 const { createMailer } = require('./lib/mail.cjs');
 const mail = createMailer(env,{onError:(e,kind)=>auth.audit('mail-failed',{user:'sistem'},{kind,error:String(e.message).slice(0,200)})});
-const NOTIFY_KINDS = ['delete-request','delete-decision','import','import-auto','import-rejected','daily-summary'];
+const NOTIFY_KINDS = ['delete-request','delete-decision','import','import-auto','import-rejected','daily-summary','data-alert'];
 const notifyOn = new Set(String(env.NOTIFY_ON||NOTIFY_KINDS.join(',')).split(',').map(x=>x.trim()).filter(k=>NOTIFY_KINDS.includes(k)));
 const extraRecipients = String(env.NOTIFY_EMAILS||'').split(/[;,\s]+/).filter(Boolean);
 const publicUrl = String(env.PUBLIC_URL||env.RENDER_EXTERNAL_URL||'').replace(/\/+$/,'');
@@ -243,7 +243,8 @@ const saveSummaryState = () => { try { fs.writeFileSync(summaryFile,JSON.stringi
 const summaryNow = () => env.SUMMARY_NOW_OVERRIDE ? new Date(env.SUMMARY_NOW_OVERRIDE) : new Date();   // SUMMARY_NOW_OVERRIDE yalniz testler icindir
 const mailImages = [['kd-time','logo-time.png'],['kd-growity','logo-growity.png']].map(([cid,f])=>({cid,type:'image/png',data:fs.readFileSync(path.join(root,f))}));
 function summaryText(t) {
-  const s = buildDailySummary(state,{yesterday:t.yesterday,start:t.start,expectedChannels:state.expectedChannels,panelUrl:publicUrl});
+  const li = auth.readAudit(1,'import')[0];
+  const s = buildDailySummary(state,{yesterday:t.yesterday,start:t.start,expectedChannels:state.expectedChannels,panelUrl:publicUrl,info:{updatedAt:state.updatedAt,updatedBy:state.updatedBy,lastImport:li}});
   return {...s,text:s.lines.join('\n')+(publicUrl?'\n\nPanel: '+publicUrl+'/':'')+'\n\nPowered by Growity AI Studio',images:mailImages};
 }
 async function sendDailySummary(t) {
@@ -253,10 +254,25 @@ async function sendDailySummary(t) {
   const r = await mail.notify('daily-summary',to,s.subject,s.text,s.html,s.images);
   return {...r,recipients:to.length,hasData:s.hasData};
 }
+// Veri on kontrolu: ozetten bir saat once (varsayilan 10:00) kritik eksik varsa (veri yok, eksik gun, beklenen kanal yok) Yonetici ve Super-yoneticilere bir kez bildirilir.
 let summaryBusy = false;
+async function alertCheck(t) {
+  const from = SUMMARY_MIN-60;
+  if (!notifyOn.has('data-alert')||!SUMMARY_DAYS.includes(t.dow)||t.minutes<from||t.minutes>=SUMMARY_MIN||summaryState.alert===t.date) return;
+  const s = summaryText(t), crit = (s.status&&s.status.issues||[]).filter(x=>x.critical);
+  summaryState.alert = t.date; saveSummaryState();                           // sorun olmasa da bugun tekrar bakilmaz
+  if (!crit.length) return;
+  const to = auth.recipients(['admin','superadmin']);
+  if (!to.length) return;
+  const text = ['Günlük özet '+SUMMARY_TIME+'\'da gönderilecek; şu an verilerde eksik var:','',...crit.map(x=>'⚠ '+x.text),'','Eksik veriyi yüklerseniz özet tam gider. Yüklemeden bırakırsanız özet, eksik bilgiyle birlikte (uyarı yazarak) gönderilir.',...(publicUrl?['','Panel: '+publicUrl+'/']:[])].join('\n');
+  const r = await mail.notify('data-alert',to,'[Kanal Doluluk] Veri eksik — özetten önce kontrol edin',text);
+  auth.audit('data-alert',{user:'sistem'},{date:t.yesterday,issues:crit.map(x=>x.text),recipients:to.length,sent:r.sent});
+}
 async function summaryTick() {
-  if (summaryBusy||!mail.enabled||!notifyOn.has('daily-summary')) return;
+  if (summaryBusy||!mail.enabled) return;
   const t = istanbulNow(summaryNow());
+  try { await alertCheck(t); } catch(e) { console.error('data alert:',e.message); }
+  if (!notifyOn.has('daily-summary')) return;
   if (!SUMMARY_DAYS.includes(t.dow)||t.minutes<SUMMARY_MIN||t.minutes>=SUMMARY_MIN+SUMMARY_WINDOW||summaryState.last===t.date) return;
   if (summaryState.tries.date===t.date&&(summaryState.tries.n>=3||Date.now()<summaryState.tries.next)) return;
   summaryBusy = true;
