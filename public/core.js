@@ -16,22 +16,22 @@ function analyze(rows,f,coverage,rules,verified){
  const init=()=>({seconds:0,count:0,capacity:0,unverified:0,grp:0,grpx:0});
  const hoursList=[];for(let h=f.hourStart;h<26;h++)if(bandOK(h))hoursList.push(h);
  for(let d of ds)for(let c of channels){let p=period(d,f.granularity),key=c+'|'+p;if(!periods.has(p))periods.set(p,init());if(!byChannel.has(c))byChannel.set(c,init());if(!matrix.has(key))matrix.set(key,init());if(!coverageSet.has(c+'|'+d)){missing++;continue;}if(verifiedSet&&!verifiedSet.has(c+'|'+d)){unverified++;matrix.get(key).unverified++;}let k=hoursList.length*720;cap+=k;periods.get(p).capacity+=k;byChannel.get(c).capacity+=k;matrix.get(key).capacity+=k;for(let h of hoursList){let hk=c+'|'+h;if(!hourly.has(hk))hourly.set(hk,init());hourly.get(hk).capacity+=720;}}
- let included=0,matched=0,reviewSeconds=0,excludedSeconds=0,invalid=0,after=0,baseTotal=0,grpTotal=0,grpxTotal=0,hasGrp=false;
+ const baseByChannel=new Map(),ec=new Map();let included=0,matched=0,reviewSeconds=0,excludedSeconds=0,invalid=0,after=0,baseTotal=0,grpTotal=0,grpxTotal=0,hasGrp=false;
  const add=(map,key,s,n,g,gx)=>{if(!map.has(key))map.set(key,init());let x=map.get(key);x.seconds+=s;x.count+=n;x.grp+=g;x.grpx+=gx;};
  for(let r of rows){let[c,main,sector,firm,product,brand,d,type,detail,a,b,duration,grp,grpx]=r;if(d<f.start||d>f.end||!channels.includes(c))continue;
  if(duration!=null)b=a+duration;
  if(!(Number.isFinite(a)&&Number.isFinite(b))||b<=a){invalid++;continue;}
  if(a>=93600){after++;continue;}let lo=Math.max(a,f.hourStart*3600),hi=Math.min(b,93600);if(hi<=lo)continue;
  let seconds=0,parts=[];for(let h=Math.floor(lo/3600);h<Math.ceil(hi/3600);h++)if(bandOK(h)){let amt=Math.max(0,Math.min(hi,(h+1)*3600)-Math.max(lo,h*3600));if(amt>0){seconds+=amt;parts.push([h,amt]);}}if(!seconds)continue;
- let rule=rules[type+'|'+detail]||'review';if(rule==='review'){reviewSeconds+=seconds;continue;}if(rule==='exclude'){excludedSeconds+=seconds;continue;}baseTotal+=seconds;
+ let rule=rules[type+'|'+detail]||'review';if(rule==='review'){reviewSeconds+=seconds;continue;}if(rule==='exclude'){excludedSeconds+=seconds;continue;}baseTotal+=seconds;baseByChannel.set(c,(baseByChannel.get(c)||0)+seconds);
  if(f.sector&&main!==f.sector||f.firm&&firm!==f.firm||f.brand&&brand!==f.brand)continue;
  let len=b-a,dur=duration!=null?duration:len,g=grp==null?0:(Number(grp)||0),gx=grpx!=null?(Number(grpx)||0):g*dur;if(grp!=null||grpx!=null)hasGrp=true;let gp=g*seconds/len,gxp=gx*seconds/len;
  matched++;included+=seconds;grpTotal+=gp;grpxTotal+=gxp;let p=period(d,f.granularity);add(periods,p,seconds,1,gp,gxp);add(byChannel,c,seconds,1,gp,gxp);add(matrix,c+'|'+p,seconds,1,gp,gxp);
  for(let[h,amt]of parts){let hk=c+'|'+h;if(!hourly.has(hk))hourly.set(hk,init());let x=hourly.get(hk);x.seconds+=amt;x.grp+=g*amt/len;x.grpx+=gx*amt/len;}
- let entity=f.view==='sector'?main:f.view==='firm'?firm:f.view==='brand'?brand:c;add(entities,entity,seconds,1,gp,gxp);
+ let entity=f.view==='sector'?main:f.view==='firm'?firm:f.view==='brand'?brand:c;add(entities,entity,seconds,1,gp,gxp);if(f.view!=='channel'){let ek=entity+'\u0001'+c;ec.set(ek,(ec.get(ek)||0)+seconds);}
  }
  let list=[...entities].map(([name,v])=>({name,...v,capacity:f.view==='channel'?(byChannel.get(name)?.capacity||0):cap,share:baseTotal?v.seconds/baseTotal:0})).sort((a,b)=>f.view==='channel'?orderChannels(a.name,b.name):b.seconds-a.seconds);
- return {channels,periods:[...periods].sort().map(([name,v])=>({name,...v})),list,matrix:[...matrix].map(([key,v])=>({key,...v})),hourly:[...hourly].map(([key,v])=>({key,...v})),hours:hoursList,capacity:cap,included,matched,grp:grpTotal,grpx:grpxTotal,hasGrp,reviewSeconds,excludedSeconds,invalid,after,missing,unverified,baseTotal};
+ return {channels,periods:[...periods].sort().map(([name,v])=>({name,...v})),list,matrix:[...matrix].map(([key,v])=>({key,...v})),hourly:[...hourly].map(([key,v])=>({key,...v})),hours:hoursList,capacity:cap,included,matched,grp:grpTotal,grpx:grpxTotal,hasGrp,reviewSeconds,excludedSeconds,invalid,after,missing,unverified,baseTotal,baseByChannel:[...baseByChannel],entityChannels:[...ec].map(([k,s])=>{let i=k.indexOf('\u0001');return [k.slice(0,i),k.slice(i+1),s];})};
 }
 // ---- Tarih ve donem yardimcilari (saf; testlenebilir)
 function addDays(d,n){let t=new Date(d+'T12:00:00Z');t.setUTCDate(t.getUTCDate()+n);return t.toISOString().slice(0,10);}

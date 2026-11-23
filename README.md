@@ -58,6 +58,8 @@ Eski sürüm (React/Vite) Vercel'de, verisi Supabase'te çalışıyordu. Yeni s�
 
 **Panel görünümü:** Üst bantta günlük işler (**Veri yükle**, **Excel'e aktar**) görünür; Kullanıcılar, Özet önizle, Silme talepleri, Veri sil, Ayarlar, Şifre ve Çıkış **Yönetim ▾** menüsündedir (Ekip kullanıcıları için menü **Hesap** adını alır). Karşılaştırma varsayılan olarak **önceki dönem**dir; kartlarda önceki döneme göre fark ve eğilim çizgisi görünür. Durum renkleri her yerde aynıdır: %0–70 yeşil, %70–90 sarı, %90+ gül (e-postayla aynı palet). Ana kanal çubuklarında 70 ve 90 eşikleri ve önceki dönem işareti, trend grafiğinde veri olmayan günler için boşluk (0 sayılmaz), hafta sonu bandı ve dönem ortalaması vardır.
 
+**Reklam payı (Reklamverenler / Markalar / Sektörler):** Bu görünümlerde **kanal dağılımı** tablosu (ilk 12) ve **pay değişimi** (önceki döneme göre en çok pay kazanan / kaybeden 5'er varlık) bulunur. Hücre değeri iki biçimde seçilebilir: *kanal içi pay* (reklamverenin o kanalın reklam süresindeki payı) veya *dağılım* (reklamverenin kendi süresinin kanallara bölünmesi). Pay %10'un altında 1 ondalıkla (%4,4), üstünde tam sayı gösterilir. Excel'de aynı veriyle **Kanal dağılımı** sayfası (ilk 30) eklenir.
+
 **Boş kapasite:** Kanal görünümünde **Boş kapasite** paneli (ve Excel'de aynı adlı sayfa): boş süre = kapasite (saat × 720 sn) − yayınlanan süre. Yalnız kapsamı olan kanal-günler sayılır; seçilen aralığın toplamıdır. İki tablo: kanal bazında (kapasite, boş saniye, boş oran, OPT / Erken PT / PT / Geç PT dilimlerine göre boş saniye ve **30 sn'lik yer sayısı**) ve en boş 15 kanal-saat. Filtreler (kanal, grup, zaman dilimi) panelle birlikte uygulanır.
 
 ## Kullanıcılar, oturum ve denetim kaydı
