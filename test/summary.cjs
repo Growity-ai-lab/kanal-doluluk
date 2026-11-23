@@ -113,6 +113,8 @@ function seed(dir) {
     assert.match(t, /En yüksek GRP: Atv 4,5 · Kanal D 3,0/);
     assert.match(t, /Beklenen kanallar için bu dönemin verisi yok: Tv8/);
     assert.match(t, /1 kanal-günün kapsamı doğrulanmamış/);
+    assert.match(t, /Veri durumu:\r?\n✓ Son yükleme: 09 May 23:00 · admin/);assert.match(t, /✓ Özet dönemi: 3\/3 günün verisi var · 3 kanal · 16 kayıt/);assert.match(t, /✓ Arşiv: 30 Nis – 09 May · /);assert.match(t, /✓ GRP: kayıtların %100'inde var/);
+    assert.match(t, /⚠ Beklenen kanallar için bu dönemin verisi yok: Tv8/);assert.ok(m[0].html.includes('Veri durumu') && m[0].html.includes('Son yükleme'));
     assert.ok(!/DİKKAT/.test(t));assert.ok(!/20(26|27)-/.test(t),'ISO tarih/yil gorunmemeli');
     const h = m[0].html;                                                               // grafikli HTML surum
     assert.ok(m[0].multipart && h, 'multipart/alternative olmali');
@@ -133,14 +135,14 @@ function seed(dir) {
     assert.match(m[0].subject, /09 May Pazar$/);
     // 4) Hafta sonu, 11:00'dan once ve 3 saatlik pencere disi: gonderilmez
     for (const iso of ['2027-05-15T08:30:00Z' /* Cumartesi */, '2027-05-16T08:30:00Z' /* Pazar */, '2027-05-17T07:30:00Z' /* Pzt 10:30 */, '2027-05-17T11:30:00Z' /* Pzt 14:30 */, '2027-05-17T12:00:00Z' /* Pzt 15:00 */])
-      assert.deepEqual(await run({ SUMMARY_NOW_OVERRIDE: iso }, 700), [], 'gonderilmemeli: ' + iso);
+      assert.deepEqual(await run({ SUMMARY_NOW_OVERRIDE: iso, NOTIFY_ON: 'daily-summary' }, 700), [], 'gonderilmemeli: ' + iso);
     // 5) 11:00'u kacirdiysa pencere icinde yetisir (Pzt 13:30)
     m = await run({ SUMMARY_NOW_OVERRIDE: '2027-05-17T10:30:00Z' }, 1500);
     assert.deepEqual(to(m), EXPECT);
     // 6) NOTIFY_ON'da daily-summary yoksa gonderilmez
     assert.deepEqual(await run({ SUMMARY_NOW_OVERRIDE: '2027-05-18T08:30:00Z', NOTIFY_ON: 'import' }, 800), []);
     // 7) SUMMARY_TIME ile saat degistirilir (11:30 ayari: 10:30'da gitmez)
-    assert.deepEqual(await run({ SUMMARY_NOW_OVERRIDE: '2027-05-18T07:30:00Z', SUMMARY_TIME: '11:30' }, 800), []);
+    assert.deepEqual(await run({ SUMMARY_NOW_OVERRIDE: '2027-05-18T07:30:00Z', SUMMARY_TIME: '11:30', NOTIFY_ON: 'daily-summary' }, 800), []);
     m = await run({ SUMMARY_NOW_OVERRIDE: '2027-05-18T08:35:00Z', SUMMARY_TIME: '11:30' }, 1500);
     assert.equal(m.length, EXPECT.length);
     // 8) SMTP hatasi: gonderildi olarak isaretlenmez, hata denetim kaydina yazilir

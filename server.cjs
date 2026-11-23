@@ -232,7 +232,7 @@ function date(s) {
   return /^\d{4}-\d{2}-\d{2}$/.test(s) && Number.isFinite(Date.parse(s)) && new Date(s).toISOString().slice(0,10)===s;
 }
 // ---- Gunluk ozet e-postasi: hafta ici 11:00 (Istanbul), e-postasi olan ve hesabi acik herkese. Ayni gun bir kez; sunucu kapaliysa 3 saat icinde yetisir.
-const { buildDailySummary, istanbulNow } = require('./lib/summary.cjs');
+const { buildDailySummary, istanbulNow, summaryTarget, dayLabel } = require('./lib/summary.cjs');
 const SUMMARY_DAYS = String(env.SUMMARY_DAYS||'1,2,3,4,5').split(',').map(Number).filter(n=>Number.isInteger(n)&&n>=0&&n<=6);
 const SUMMARY_TIME = /^([01]?\d|2[0-3]):([0-5]\d)$/.test(String(env.SUMMARY_TIME||'11:00')) ? String(env.SUMMARY_TIME||'11:00') : '11:00';
 const SUMMARY_MIN = Number(SUMMARY_TIME.split(':')[0])*60+Number(SUMMARY_TIME.split(':')[1]), SUMMARY_WINDOW = 180;
@@ -243,7 +243,8 @@ const saveSummaryState = () => { try { fs.writeFileSync(summaryFile,JSON.stringi
 const summaryNow = () => env.SUMMARY_NOW_OVERRIDE ? new Date(env.SUMMARY_NOW_OVERRIDE) : new Date();   // SUMMARY_NOW_OVERRIDE yalniz testler icindir
 const mailImages = [['kd-time','logo-time.png'],['kd-growity','logo-growity.png']].map(([cid,f])=>({cid,type:'image/png',data:fs.readFileSync(path.join(root,f))}));
 function summaryText(t) {
-  const s = buildDailySummary(state,{yesterday:t.yesterday,start:t.start,expectedChannels:state.expectedChannels,panelUrl:publicUrl});
+  const li = auth.readAudit(1,'import')[0];
+  const s = buildDailySummary(state,{yesterday:t.yesterday,start:t.start,expectedChannels:state.expectedChannels,panelUrl:publicUrl,info:{updatedAt:state.updatedAt,updatedBy:state.updatedBy,lastImport:li}});
   return {...s,text:s.lines.join('\n')+(publicUrl?'\n\nPanel: '+publicUrl+'/':'')+'\n\nPowered by Growity AI Studio',images:mailImages};
 }
 async function sendDailySummary(t) {
@@ -254,9 +255,29 @@ async function sendDailySummary(t) {
   return {...r,recipients:to.length,hasData:s.hasData};
 }
 let summaryBusy = false;
-async function summaryTick() {
-  if (summaryBusy||!mail.enabled||!notifyOn.has('daily-summary')) return;
+// Bir sonraki ozetin (hafta ici, SUMMARY_TIME) hedef donemi; yukleme sonrasi veri kontrolu bu doneme gore yapilir.
+function nextSummaryTarget() {
   const t = istanbulNow(summaryNow());
+  let date = t.date;
+  for (let i = 0; i < 9; i++) {
+    const g = summaryTarget(date);
+    if (SUMMARY_DAYS.includes(g.dow) && (i > 0 || (t.minutes < SUMMARY_MIN && summaryState.last !== date))) return g;
+    date = new Date(Date.parse(date + 'T12:00:00Z') + 86400000).toISOString().slice(0, 10);
+  }
+  return summaryTarget(t.date);
+}
+// Yukleme e-postasina eklenen veri kontrolu satirlari (hata olursa yuklemeyi etkilemez).
+function uploadCheckLines() {
+  try {
+    const g = nextSummaryTarget(), s = summaryText(g), st = s.status;
+    if (!st) return [];
+    return ['', 'Veri kontrolü — sonraki özet için ('+dayLabel(g.date)+' '+SUMMARY_TIME+'):', ...st.facts.filter(f=>f.startsWith('Özet dönemi')).map(f=>'✓ '+f), ...(st.issues.length?st.issues.map(x=>'⚠ '+x.text):['✓ Eksik veya sorun yok.'])];
+  } catch(e) { console.error('upload check:',e.message); return []; }
+}
+async function summaryTick() {
+  if (summaryBusy||!mail.enabled) return;
+  const t = istanbulNow(summaryNow());
+  if (!notifyOn.has('daily-summary')) return;
   if (!SUMMARY_DAYS.includes(t.dow)||t.minutes<SUMMARY_MIN||t.minutes>=SUMMARY_MIN+SUMMARY_WINDOW||summaryState.last===t.date) return;
   if (summaryState.tries.date===t.date&&(summaryState.tries.n>=3||Date.now()<summaryState.tries.next)) return;
   summaryBusy = true;
@@ -515,7 +536,8 @@ http.createServer(async(req,res)=>{
             'Arşivde toplam: '+m.rows.length+' kayıt',
             ...(m.missingChannels&&m.missingChannels.length?['','UYARI: dosyada eksik kanallar: '+m.missingChannels.join('; ')]:[]),
             ...(warnings.length?['',(machine?'UYARI':'UYARI (yükleyen onayladı)')+':',...warnings.map(w=>'- '+w)]:[]),
-            ...(retWarn?['','UYARI: '+retWarn]:[])]);
+            ...(retWarn?['','UYARI: '+retWarn]:[]),
+            ...uploadCheckLines()]);
           return send(res,200,{added:m.added,updated:m.updated,skipped:m.skipped,total:m.rows.length,missingChannels:m.missingChannels,warning:retWarn});
         });
       }

@@ -190,6 +190,11 @@ Zamanlama: sunucu her dakika kontrol eder; özet o gün bir kez gönderilir (dur
 
 **Açılış tarihi:** Panel açıldığında rapor başlangıcı içinde bulunulan ayın 1'idir (arşivdeki ilk veri tarihi değil); bitiş, tamamlanmış son gündür. Ayın 1'inde veya son veri önceki aydaysa başlangıç, o son verinin ayının 1'i olur, böylece aralık boş kalmaz. Tarihleri yine elle ya da hızlı dönem listesinden değiştirebilirsiniz.
 
+### Veri durumu ve yükleme sonrası kontrol (A11)
+
+- **Özetteki "Veri durumu" kutusu** (e-postanın altında): son yükleme zamanı ve yükleyen (otomatik aktarım ise belirtilir), yüklemenin ayrıntısı (eklenen / güncellenen / atlanan, yöntem), özet döneminde kaç günün verisi olduğu, kanal ve kayıt sayısı, arşivin kapsadığı aralık, GRP'li kayıt oranı. Altında sorunlar ve eksikler listelenir (verisi olmayan gün, beklenen kanallar, GRP'siz kayıt, doğrulanmamış kapsam, belirsiz tür, son yüklemede onaylanan uyarılar); hiçbiri yoksa "Eksik veya sorun yok" yazar.
+- **Yükleme sonrası veri kontrolü:** Her yüklemeden hemen sonra (panelden ya da otomatik aktarımla) bir sonraki özetin dönemi için veri kontrolü yapılır ve sonuç **"Yeni veri yüklendi" / "Otomatik veri aktarımı tamamlandı" e-postasının içine** eklenir: özet dönemi için kaç günün verisi olduğu ve varsa sorunlar (verisi olmayan gün, beklenen kanal yok, GRP'siz kayıt ...) ya da "Eksik veya sorun yok". Ayrı bir zamanlanmış kontrol yoktur; geç yüklemeler (örn. 10:30) gereksiz bir kontrol çalıştırmaz. Hedef özet: hafta içi bugünkü özet henüz gitmediyse bugünün, gittiyse sonraki iş gününün özeti (Pazartesi özeti Cuma–Pazar'ı kapsar).
+
 ## Yükleme öncesi kontrol
 
 Panelden Excel yüklerken dosya kaydedilmeden önce kontrol edilir. Şunlardan biri varsa **hiçbir şey yazılmaz**; uyarılar listelenir ve "Yine de yüklemek istiyor musunuz?" diye sorulur (Tamam derseniz dosya aynı seçeneklerle yüklenir):
