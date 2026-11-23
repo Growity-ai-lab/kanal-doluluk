@@ -38,6 +38,9 @@ console.log('OK: calculation and Excel workbook with both charts.');
     const hourly=sheet('Saatlik doluluk'),hdr=hourly[0],row=hourly.find(r=>r[0]==='Atv');
     assert.equal(row[hdr.indexOf('18:00')],30/720);assert.equal(row[hdr.indexOf('10:00')],20/720);assert.equal(hdr.at(-1),'25:00');
     assert.equal(wbk.SheetNames.includes('Boş kapasite'),view==='channel');
+    assert.equal(wbk.SheetNames.includes('Kanal dağılımı'),view==='brand');
+    if(view==='brand'){const mx=sheet('Kanal dağılımı'),h=mx[2],ma=mx.find(r=>r[0]==='Marka A'),mb=mx.find(r=>r[0]==='Marka B');
+      assert.deepEqual(h.slice(0,3),['Marka','Atv (sn)','Diğer (sn)']);assert.deepEqual([ma[1],ma[2],ma[3]],[30,0,30]);assert.equal(ma[h.indexOf('Atv kanal içi pay')],0.6);assert.equal(mb[h.indexOf('Atv kanal içi pay')],0.4);assert.equal(ma.at(-1),0.6);}
     if(view==='channel'){const fr=sheet('Boş kapasite'),ar=fr.find(r=>r[0]==='Atv');assert.deepEqual(ar.slice(1,3).concat(ar.slice(4,9)),[13680,13630,7900,1410,2880,1440,454]);}
     const g=sheet('Saatlik GRP'),grow=g.find(r=>r[0]==='Atv');assert.equal(grow[g[0].indexOf('18:00')],0.6);assert.equal(grow[g[0].indexOf('10:00')],0.1);
     const res=sheet('Sonuçlar');assert.deepEqual(res[0].slice(-2),['GRP','GRPxSEC']);const ar=res.find(r=>r[0]==='Atv'||r[0]==='Marka A');assert.equal(ar[ar.length-1]>0,true);
