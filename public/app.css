@@ -52,3 +52,11 @@ header .actions{align-items:center;gap:8px}
 @media(max-width:850px){.mix-moves{grid-template-columns:1fr}}
 
 .cards.ent .card:first-child{display:none!important}.cards.ent{grid-template-columns:repeat(3,1fr)}
+
+.band-rate{margin-left:6px;font-weight:700;color:var(--blue);font-variant-numeric:tabular-nums}
+.extra>summary{list-style:none;padding:0}.extra>summary::-webkit-details-marker{display:none}
+.xbtn{display:inline-flex;align-items:center;gap:8px;padding:8px 16px;border:1.5px solid var(--blue);border-radius:999px;background:#fff;color:var(--blue);font-weight:700;font-size:13px;cursor:pointer;transition:background .15s}
+.xbtn:hover,.extra[open]>summary .xbtn{background:#eef2ff}.xbtn::after{content:'▾';font-size:11px;transition:transform .15s}.extra[open]>summary .xbtn::after{transform:rotate(180deg)}
+.xcount{background:var(--blue);color:#fff;border-radius:999px;font-size:11px;min-width:18px;padding:1px 6px;text-align:center}.xcount.hidden{display:none}
+.extra>summary:focus-visible .xbtn{outline:2px solid var(--blue);outline-offset:2px}
+.xbtn{white-space:nowrap}.xbtn svg{width:14px!important;height:14px!important;max-width:none;flex:none}

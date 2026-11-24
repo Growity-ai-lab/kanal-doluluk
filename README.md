@@ -66,6 +66,10 @@ Eski sürüm (React/Vite) Vercel'de, verisi Supabase'te çalışıyordu. Yeni s�
 
 **Pencereler:** Yönetim menüsünden açılan pencereler, pencerenin dışındaki boş alana tıklayınca (ya da Esc ile) kapanır.
 
+**Zaman aralığı kutusu:** "7 ana kanal — doluluk" bölümünde her zaman aralığının (OPT, Erken PT, PT, Geç PT) yanında, seçili dönemin o aralıktaki 7 ana kanal doluluğu görünür (tüm filtreler uygulanır; işareti kaldırılmış aralıklar için de hesaplanır).
+
+**Detaylı filtreler** düğmesi çerçeveli bir düğmedir; açık filtre sayısını (kanal grubu, sektör, reklamveren, marka, kısmi zaman dilimi) rozet olarak gösterir.
+
 **Boş kapasite:** Kanal görünümünde **Boş kapasite** hesabı yalnızca Excel'deki aynı adlı sayfadadır (panelde bölüm gösterilmez): boş süre = kapasite (saat × 720 sn) − yayınlanan süre. Yalnız kapsamı olan kanal-günler sayılır; seçilen aralığın toplamıdır. İki tablo: kanal bazında (kapasite, boş saniye, boş oran, OPT / Erken PT / PT / Geç PT dilimlerine göre boş saniye ve **30 sn'lik yer sayısı**) ve en boş 15 kanal-saat. Filtreler (kanal, grup, zaman dilimi) panelle birlikte uygulanır.
 
 ## Kullanıcılar, oturum ve denetim kaydı
