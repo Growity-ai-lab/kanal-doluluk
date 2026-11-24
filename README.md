@@ -207,7 +207,7 @@ E-posta **grafikli HTML** olarak gelir (KPI kartları ve fark etiketleri, 7 ana 
 
 İçerik (panelle aynı hesap çekirdeğiyle üretilir, rakamlar birebir aynıdır):
 - **Günün öne çıkanları** (en üstte, yapay zekâsız, kural tabanlı): en çok düşen / yükselen ana kanal (5 puan ve üzeri; "Atv %43 → %48 (+%5)" biçiminde önceki ve sonraki değerle), doluluk ile GRP'nin ters yönde hareketi, %90 üzeri kanallar ya da en dolu kanal, yoğun saatin kayması. Belirgin değişim yoksa bunu söyler. Rakamlar e-postanın geri kalanıyla aynı hesaptan gelir.
-- Genel doluluk ve **önceki haftanın aynı gününe** göre fark (puan), reklam süresi, GRP ve GRPxSEC değişimi.
+- Genel doluluk ve **önceki haftanın aynı gününe** göre fark (önceki değerle birlikte, ör. %9 → %10 (+%1)), reklam süresi, GRP ve GRPxSEC değişimi.
 - **7 ana kanal**: doluluk (sıralı), önceki haftaya göre fark, GRP; diğer kanalların ortalaması; en yoğun ve en sakin saat; en yüksek GRP'li kanallar.
 - **Uyarılar**: beklenen kanalın o gün verisi yok, doğrulanmamış kapsam, kapsamı olmayan kanal-gün, belirsiz tür süresi, geçersiz kayıt.
 - **Dünün verisi yüklenmemişse** e-posta bunu açıkça yazar ("DİKKAT: Dün için arşivde veri yok") ve verisi olan son günü özetler. Pazartesi günkü özet Pazar gününü kapsar.

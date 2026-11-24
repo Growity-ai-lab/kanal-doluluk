@@ -105,8 +105,8 @@ function seed(dir) {
     assert.equal(m[0].subject, '[Kanal Doluluk] Günlük özet — 07 May Cuma – 09 May Pazar');
     const t = m[0].text;
     assert.match(t, /07 May Cuma – 09 May Pazar günleri/);
-    assert.match(t, /Genel doluluk: %10 — önceki hafta \(30 Nis Cuma – 02 May Pazar\): %9 \(\+1 puan\)/);
-    assert.match(t, /1\. Atv: %13 \(\+4 puan\) · GRP 4,5/);
+    assert.match(t, /Genel doluluk: %10 — önceki hafta \(30 Nis Cuma – 02 May Pazar\): %9 \(\+%1\)/);
+    assert.match(t, /1\. Atv: %13 \(\+%4\) · GRP 4,5/);
     assert.match(t, /2\. Kanal D: %9 · GRP 3,0/);                                  // geçen hafta Kanal D verisi yok: fark yazilmaz
     assert.match(t, /Diğer 1 kanalın ortalaması: %2/);
     assert.match(t, /GRP: 7,5 \(\+%150\) · GRPxSEC: 4\.500,0/);
