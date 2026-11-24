@@ -368,7 +368,7 @@ http.createServer(async(req,res)=>{
       res.setHeader('Set-Cookie',cookieHeader(req,r.cookie,43200));
       return send(res,200,{ok:true});
     }
-    if(route==='/api/users'&&method==='GET') {need(2); return send(res,200,{users:auth.listUsers(),mail:{enabled:mail.enabled,missing:mail.missing,from:mail.from,notifyOn:[...notifyOn],extraRecipients:extraRecipients.length,summary:{enabled:notifyOn.has('daily-summary'),time:SUMMARY_TIME,days:SUMMARY_DAYS}}});}
+    if(route==='/api/users'&&method==='GET') {need(2); return send(res,200,{users:auth.listUsers(),mail:{enabled:mail.enabled,transport:mail.transport,missing:mail.missing,from:mail.from,notifyOn:[...notifyOn],extraRecipients:extraRecipients.length,summary:{enabled:notifyOn.has('daily-summary'),time:SUMMARY_TIME,days:SUMMARY_DAYS}}});}
     if(route==='/api/summary-test'&&method==='POST') {
       need(2); panel(req);
       if(url.searchParams.get('to')==='supers') {   // deneme: yalniz e-postasi olan tum Super-yoneticilere (diger kullanicilara gitmez)
