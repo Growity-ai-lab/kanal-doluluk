@@ -89,5 +89,52 @@ const { createMailer, smtpSend, buildMessage, isEmail } = require('../lib/mail.c
   s.state.reject = false;
   assert.equal((await mailer.notify('t', ['e@example.com'], 's', 't')).sent, 1); // hatadan sonra kuyruk calismaya devam eder
   await s.close();
+
+  // --- Microsoft Graph: eksik degisken adlari, token + sendMail (MIME), 401'de yeniden token, hata mesaji
+  {
+    const gm = createMailer({ GRAPH_TENANT_ID: 't', MAIL_FROM: 'bilgi@time-tr.com' });
+    assert.equal(gm.enabled, false); assert.deepEqual(gm.missing, ['GRAPH_CLIENT_ID', 'GRAPH_CLIENT_SECRET']);
+    const http = require('node:http');
+    const st = { tokens: 0, sends: [], mode: 'ok', tokenMode: 'ok' };
+    const srv = http.createServer((req, res) => {
+      let body = ''; req.on('data', d => body += d); req.on('end', () => {
+        const j = (c, o) => { res.writeHead(c, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(o)); };
+        if (req.url === '/tenant-1/oauth2/v2.0/token') {
+          st.tokens++; const q = new URLSearchParams(body);
+          if (st.tokenMode === 'bad' || q.get('client_secret') !== 'gizli-deger' || q.get('client_id') !== 'app-1' || q.get('grant_type') !== 'client_credentials' || q.get('scope') !== 'https://graph.microsoft.com/.default') return j(401, { error: 'invalid_client', error_description: 'AADSTS7000215: Invalid client secret provided.' });
+          return j(200, { access_token: 'tok-' + st.tokens, expires_in: 3600 });
+        }
+        if (req.url === '/users/bilgi%40time-tr.com/sendMail') {
+          st.sends.push({ auth: req.headers.authorization, ct: req.headers['content-type'], mime: Buffer.from(body, 'base64').toString('utf8') });
+          if (st.mode === 'expire' && st.sends.length === 1) return j(401, { error: { code: 'InvalidAuthenticationToken', message: 'expired' } });
+          if (st.mode === 'denied') return j(403, { error: { code: 'ErrorAccessDenied', message: 'Access is denied. Check credentials and try again.' } });
+          res.writeHead(202); return res.end();
+        }
+        j(404, {});
+      });
+    });
+    await new Promise(r => srv.listen(0, '127.0.0.1', r)); const u = 'http://127.0.0.1:' + srv.address().port;
+    const env = { GRAPH_TENANT_ID: 'tenant-1', GRAPH_CLIENT_ID: 'app-1', GRAPH_CLIENT_SECRET: 'gizli-deger', MAIL_FROM: 'Kanal Doluluk <bilgi@time-tr.com>', GRAPH_BASE_URL: u, GRAPH_LOGIN_URL: u, SMTP_HOST: 'eski.example.com' };
+    const errs = []; const g = createMailer(env, { onError: e => errs.push(e.message) });
+    assert.equal(g.enabled, true); assert.equal(g.transport, 'graph'); assert.deepEqual(g.missing, []);
+    const png = Buffer.from('iVBORw0KGgo=', 'base64');
+    const r1 = await g.notify('t', ['x@example.com', 'y@example.com'], 'Özet Şğ', 'düz metin', '<p>html</p><img src="cid:kd-time">', [{ cid: 'kd-time', type: 'image/png', data: png }]);
+    assert.equal(r1.sent, 2); assert.equal(st.tokens, 1, 'token onbellege alinmali');
+    assert.equal(st.sends[0].auth, 'Bearer tok-1'); assert.equal(st.sends[0].ct, 'text/plain');
+    assert.match(st.sends[0].mime, /^From: Kanal Doluluk <bilgi@time-tr\.com>/m); assert.match(st.sends[0].mime, /^To: <x@example\.com>/m);
+    assert.match(st.sends[0].mime, /Content-ID: <kd-time>/); assert.match(st.sends[1].mime, /^To: <y@example\.com>/m);
+    st.sends.length = 0; st.mode = 'expire';
+    assert.equal((await g.notify('t', ['z@example.com'], 's', 't')).sent, 1); assert.equal(st.tokens, 2, '401 sonrasi yeni token'); assert.equal(st.sends[1].auth, 'Bearer tok-2');
+    st.mode = 'denied';
+    await assert.rejects(g.sendNow('q@example.com', 's', 't'), e => /403 ErrorAccessDenied/.test(e.message) && !/gizli-deger/.test(e.message));
+    assert.equal((await g.notify('k', ['w@example.com'], 's', 't')).sent, 0); assert.match(errs[0], /ErrorAccessDenied/);
+    // yanlis secret: AAD hatasi okunur ve secret mesajda yer almaz
+    st.mode = 'ok'; st.tokenMode = 'bad';
+    const g2 = createMailer({ ...env, GRAPH_CLIENT_SECRET: 'yanlis-secret-xyz', GRAPH_CLIENT_ID: 'app-2' });
+    await assert.rejects(g2.sendNow('q@example.com', 's', 't'), e => /token alma reddedildi: HTTP 401 invalid_client - AADSTS7000215/.test(e.message) && !/yanlis-secret-xyz/.test(e.message));
+    // gercek ortamda GRAPH_*_URL uzak adrese yonlendirilemez
+    assert.equal(createMailer({ ...env, GRAPH_BASE_URL: 'https://kotu.example.com' }).enabled, true);
+    await new Promise(r => srv.close(r));
+  }
   console.log('OK: e-posta istemcisi (bicim, enjeksiyon, AUTH, TLS/STARTTLS, sertifika dogrulama, zaman asimi, kuyruk).');
 })().catch(e => { console.error(e); process.exitCode = 1; });

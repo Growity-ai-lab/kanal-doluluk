@@ -135,14 +135,34 @@ Admin, panelde **Ayarlar → Anlık görüntüler** bölümünden bir kopyayı g
 
 ## E-posta bildirimi
 
-Sunucu, sağlayıcıdan bağımsız SMTP ile e-posta gönderir (ek paket gerekmez). Ayarlar yalnızca Render'daki ortam değişkenleridir; **hiçbiri depoya yazılmaz**. Beşi de tanımlıysa bildirim açılır, yoksa kapalı kalır (panelde "Kullanıcılar" ekranında durumu görünür).
+Sunucu e-postayı iki yoldan biriyle gönderir (ek paket gerekmez): **Microsoft Graph** (Microsoft 365 için önerilen; SMTP AUTH kapalı kuruluşlarda da çalışır) veya sağlayıcıdan bağımsız **SMTP**. `GRAPH_*` değişkenlerinden biri bile tanımlıysa Graph kullanılır; SMTP değişkenleri o zaman yok sayılır. Ayarlar yalnızca Render'daki ortam değişkenleridir; **hiçbiri depoya yazılmaz**. Gerekli değişkenler tanımlıysa bildirim açılır, yoksa kapalı kalır (panelde "Kullanıcılar" ekranında durum ve eksik değişken adları görünür).
+
+### Microsoft Graph kurulumu (Microsoft 365)
+
+1. **Entra ID → Uygulama kayıtları** (`entra.microsoft.com`): uygulamanın **Genel bakış** sayfasındaki *Uygulama (istemci) kimliği* ve *Dizin (kiracı) kimliği* değerlerini al; **Sertifikalar ve gizli diziler**'den oluşturulan gizli anahtarın **Değer** sütununu (yalnızca oluşturulurken görünür) kullan.
+2. **API izinleri → İzin ekle → Microsoft Graph → Uygulama izinleri → `Mail.Send`**; ardından **\<kuruluş\> için yönetici onayı ver**. (Temsilci izni değil, *Uygulama* izni olmalı.)
+3. **Önerilen kısıtlama:** `Mail.Send` uygulama izni varsayılanda kiracıdaki *tüm* posta kutuları adına göndermeye izin verir. Exchange Online PowerShell ile yalnızca gönderen kutuyla sınırla:
+   ```powershell
+   New-DistributionGroup -Name "kanal-doluluk-gonderen" -Type Security -Members bilgi@time-tr.com
+   New-ApplicationAccessPolicy -AppId <istemci-kimliği> -PolicyScopeGroupId kanal-doluluk-gonderen -AccessRight RestrictAccess -Description "Kanal Doluluk yalniz bilgi@ kutusu"
+   Test-ApplicationAccessPolicy -Identity bilgi@time-tr.com -AppId <istemci-kimliği>
+   ```
+4. Gönderen kutunun (`bilgi@time-tr.com`) lisanslı bir posta kutusu (veya paylaşılan posta kutusu) olması gerekir.
+5. Render → *Environment*'a ekle: `GRAPH_TENANT_ID`, `GRAPH_CLIENT_ID`, `GRAPH_CLIENT_SECRET`, `MAIL_FROM` (örn. `Kanal Doluluk <bilgi@time-tr.com>`). Eski `SMTP_*` değişkenlerini silebilirsin. Kaydet → servis yeniden başlar → **Kullanıcılar → Test e-postası gönder**.
+6. Hata mesajları ekranda Microsoft'un kodunu gösterir (gizli anahtar asla görünmez): `invalid_client / AADSTS7000215` gizli anahtar yanlış (kimliği değil *Değer*'i gir), `AADSTS7000222` anahtarın süresi dolmuş, `ErrorAccessDenied` izin/yönetici onayı ya da erişim ilkesi, `MailboxNotEnabledForRESTAPI`/`ErrorInvalidUser` gönderen kutu bulunamıyor veya lisanssız.
+7. Gizli anahtarın süresi dolar (en çok 24 ay); dolmadan yenisini oluşturup Render'da değiştir.
+
+Graph iletileri ham MIME olarak gönderir; gömülü logolar ve düz metin yedeği SMTP ile aynıdır. Gönderilen iletiler gönderen kutunun *Gönderilmiş Öğeler* klasöründe de görünür.
+
+### Ortam değişkenleri
 
 | Ortam değişkeni | Anlamı |
 |---|---|
 | `ADMIN_EMAIL` | (isteğe bağlı) acil durum `admin` hesabının bildirim adresi; bu adrese de Süper-yönetici bildirimleri ve özet denemeleri gider |
-| `SMTP_HOST` | SMTP sunucusu (örn. `smtp.gmail.com`) |
+| `GRAPH_TENANT_ID`, `GRAPH_CLIENT_ID`, `GRAPH_CLIENT_SECRET` | Microsoft Graph (uygulama izni `Mail.Send`); gönderen `MAIL_FROM` adresidir |
+| `SMTP_HOST` | (SMTP kullanılacaksa) SMTP sunucusu (örn. `smtp.gmail.com`) |
 | `SMTP_PORT` | `465` (doğrudan TLS, varsayılan) veya `587` (STARTTLS). `SMTP_SECURE=true/false` ile değiştirilir |
-| `SMTP_USER`, `SMTP_PASSWORD` | Gönderen posta kutusunun kullanıcı adı ve şifresi (uygulama şifresi / API anahtarı) |
+| `SMTP_USER`, `SMTP_PASSWORD` | (SMTP) Gönderen posta kutusunun kullanıcı adı ve şifresi (uygulama şifresi / API anahtarı) |
 | `MAIL_FROM` | Gönderen, örn. `Kanal Doluluk <bildirim@sirket.com>` (sağlayıcının izin verdiği adres) |
 | `PUBLIC_URL` | (isteğe bağlı) e-postadaki panel bağlantısı; Render'da `RENDER_EXTERNAL_URL` otomatik kullanılır |
 | `NOTIFY_ON` | (isteğe bağlı) virgülle ayrılmış bildirim türleri; varsayılan hepsi: `delete-request,delete-decision,import,import-auto,import-rejected,daily-summary` |
@@ -166,7 +186,7 @@ Ekip kullanıcıları günlük özet dışında bildirim almaz. Alıcının adre
 
 - **Google Workspace:** `smtp.gmail.com`, `465`, kullanıcı = gönderen posta kutusunun tam adresi, şifre = o hesap için üretilmiş **uygulama şifresi** (hesapta 2 adımlı doğrulama açık olmalı ve yönetici konsolunda izin verilmiş olmalı), `MAIL_FROM` aynı adres.
 - **SendGrid / Brevo / Resend / Mailgun:** sağlayıcının SMTP bilgilerini gir (örn. SendGrid: `smtp.sendgrid.net`, kullanıcı `apikey`, şifre = API anahtarı); gönderen alan adını sağlayıcıda doğrulamak gerekir.
-- **Microsoft 365:** `smtp.office365.com`, `587`; yönetici SMTP AUTH'u o posta kutusu için açmalıdır ve Microsoft temel kimlik doğrulamayı kademeli olarak kapatmaktadır; sorun yaşarsan yukarıdaki sağlayıcılardan birini tercih et.
+- **Microsoft 365:** SMTP yerine yukarıdaki **Microsoft Graph** yolunu kullan (SMTP AUTH / temel kimlik doğrulama Microsoft tarafından kapatılmaktadır).
 - Render'ın **ücretsiz** planı SMTP portlarını engeller; ücretli (Pro) planda açıktır.
 
 **Güvenlik ve davranış:** Şifre yalnızca şifreli bağlantıda (465 veya STARTTLS) gönderilir; sunucu şifreli bağlantı sunmazsa kimlik bilgisi hiç gönderilmez ve sertifika doğrulaması kapatılamaz. E-posta hataları işlemi bozmaz: yükleme/silme yine tamamlanır, hata denetim kaydına `E-posta gönderilemedi` olarak yazılır. E-postalara yalnızca özet bilgi ve panel bağlantısı konur; ADEX kayıtları, şifreler veya anahtarlar konmaz. Bildirimler anlık değil sıralı gönderilir (kuyruk 100 ileti ile sınırlıdır).

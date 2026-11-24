@@ -32,5 +32,6 @@ services:
         sync: false
       # E-posta bildirimi (istege bagli): asagidaki degiskenleri Render panelinde Environment sekmesine ekleyin
       # (README: "E-posta bildirimi"). Degerler depoya yazilmaz.
-      #   SMTP_HOST, SMTP_PORT (465 veya 587), SMTP_USER, SMTP_PASSWORD, MAIL_FROM
+      #   Microsoft 365 (onerilen): GRAPH_TENANT_ID, GRAPH_CLIENT_ID, GRAPH_CLIENT_SECRET, MAIL_FROM
+      #   veya SMTP: SMTP_HOST, SMTP_PORT (465 veya 587), SMTP_USER, SMTP_PASSWORD, MAIL_FROM
       #   istege bagli: PUBLIC_URL, NOTIFY_ON, NOTIFY_EMAILS
