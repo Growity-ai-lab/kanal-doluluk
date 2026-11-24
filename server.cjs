@@ -271,7 +271,8 @@ function uploadCheckLines() {
   try {
     const g = nextSummaryTarget(), s = summaryText(g), st = s.status;
     if (!st) return [];
-    return ['', 'Veri kontrolü — sonraki özet için ('+dayLabel(g.date)+' '+SUMMARY_TIME+'):', ...st.facts.filter(f=>f.startsWith('Özet dönemi')).map(f=>'✓ '+f), ...(st.issues.length?st.issues.map(x=>'⚠ '+x.text):['✓ Eksik veya sorun yok.'])];
+    const facts = st.facts.filter(f=>!f.startsWith('Son yükleme')&&!f.startsWith('Yükleme ayrıntısı'));
+    return ['', 'Veri durumu — sonraki özet için ('+dayLabel(g.date)+' '+SUMMARY_TIME+'):', ...facts.map(f=>'✓ '+f), ...(st.issues.length?st.issues.map(x=>'⚠ '+x.text):['✓ Eksik veya sorun yok.'])];
   } catch(e) { console.error('upload check:',e.message); return []; }
 }
 async function summaryTick() {

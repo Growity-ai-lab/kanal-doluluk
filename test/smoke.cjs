@@ -447,7 +447,7 @@ const fake=createFakeSmtp();
  // panelden veri yukleme -> yoneticiler ve super-yoneticiler (yukleyen haric); ekibe gitmez
  g=await gather(()=>post(append,ym,book(['2027-03-01'],30)),SUPERS.length+1);
  assert.equal(g.r.status,200);assert.deepEqual(toSet(g.mails),[...SUPERS,'yonetici.iki@example.com'].sort());
- assert.match(g.mails[0].subject,/Yeni veri yüklendi/);assert.match(g.mails[0].text,/yonetici\.mail \(panel\) veri yükledi/);assert.match(g.mails[0].text,/Eklenen: 1 .* Güncellenen: 0/);assert.match(g.mails[0].text,/Veri kontrolü — sonraki özet için \(.*\):/);assert.match(g.mails[0].text,/(✓ Eksik veya sorun yok\.|⚠ )/);assert.match(g.mails[0].text,/Arşivde toplam: \d+ kayıt/);
+ assert.match(g.mails[0].subject,/Yeni veri yüklendi/);assert.match(g.mails[0].text,/yonetici\.mail \(panel\) veri yükledi/);assert.match(g.mails[0].text,/Eklenen: 1 .* Güncellenen: 0/);assert.match(g.mails[0].text,/Veri durumu — sonraki özet için \(.*\):/);assert.match(g.mails[0].text,/(✓ Eksik veya sorun yok\.|⚠ )/);assert.match(g.mails[0].text,/Arşivde toplam: \d+ kayıt/);
  // otomatik aktarim -> tum yoneticiler; reddedilirse yalniz super-yoneticilere
  const wk=['2026-11-13','2026-11-14','2026-11-15'],aurl='/api/import?start=2026-11-13&end=2026-11-15';
  g=await gather(()=>post(aurl,bot,book(wk,45),false),SUPERS.length+2);

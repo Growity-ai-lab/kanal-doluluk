@@ -111,10 +111,10 @@ function seed(dir) {
     assert.match(t, /Diğer 1 kanalın ortalaması: %2/);
     assert.match(t, /GRP: 7,5 \(\+%150\) · GRPxSEC: 4\.500,0/);
     assert.match(t, /En yüksek GRP: Atv 4,5 · Kanal D 3,0/);
-    assert.match(t, /Beklenen kanallar için bu dönemin verisi yok: Tv8/);
-    assert.match(t, /1 kanal-günün kapsamı doğrulanmamış/);
-    assert.match(t, /Veri durumu:\r?\n✓ Son yükleme: 09 May 23:00 · admin/);assert.match(t, /✓ Özet dönemi: 3\/3 günün verisi var · 3 kanal · 16 kayıt/);assert.match(t, /✓ Arşiv: 30 Nis – 09 May · /);assert.match(t, /✓ GRP: kayıtların %100'inde var/);
-    assert.match(t, /⚠ Beklenen kanallar için bu dönemin verisi yok: Tv8/);assert.ok(m[0].html.includes('Veri durumu') && m[0].html.includes('Son yükleme'));
+
+
+    assert.ok(!/Veri durumu/.test(t) && !m[0].html.includes('Veri durumu') && !m[0].html.includes('Son yükleme'), 'Veri durumu herkese giden ozette olmamali');
+
     assert.ok(!/DİKKAT/.test(t));assert.ok(!/20(26|27)-/.test(t),'ISO tarih/yil gorunmemeli');
     const h = m[0].html;                                                               // grafikli HTML surum
     assert.ok(m[0].multipart && h, 'multipart/alternative olmali');
