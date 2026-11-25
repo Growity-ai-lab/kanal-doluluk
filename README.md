@@ -239,6 +239,8 @@ Yüzdeler (panel, e-posta, Excel) ondalıksız, tam sayı olarak gösterilir; GR
 
 **Marka:** time logosu panelin üst bandında, giriş sayfasında ve e-postanın başlığında; "powered by Growity AI Studio" panelin altında, giriş sayfasında ve e-postanın altında yer alır (dosyalar `public/logo-time.png`, `public/logo-growity.png`). E-postada logolar iletinin içine gömülür (`cid:`), bu yüzden e-posta istemcilerinde "resimleri göster" demeden ve dış adrese gitmeden görünür.
 
+**Tema:** Renk rolleri sabittir: **mavi** doluluk, süre ve pay; **pembe** (TIME logosundaki vurgu, `#e2215f`) GRP ve marka vurgusudur (GRP çubukları, GRP trendi, saatlik GRP ısı hücreleri, başlık çizgisi, e-posta başlığı). Doluluk durum renkleri (yeşil %0–70, sarı %70–90, gül %90+) panelde ve e-postada aynıdır ve değişmedi. Yüzeyler yumuşatıldı (daha yuvarlak köşeler, hafif gölgeler, odak halkaları); stil `public/app.css` ve `public/login.css` sonundaki "Tema v2" bölümündedir. Telefon genişliğinde (390 px) yatay taşma yoktur.
+
 ## Veri silme (gerekçe ve süper-yönetici onayı)
 
 Veri azaltan işlemler gerekçe ister ve **süper-yönetici onayından** geçer:

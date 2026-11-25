@@ -60,3 +60,44 @@ header .actions{align-items:center;gap:8px}
 .xcount{background:var(--blue);color:#fff;border-radius:999px;font-size:11px;min-width:18px;padding:1px 6px;text-align:center}.xcount.hidden{display:none}
 .extra>summary:focus-visible .xbtn{outline:2px solid var(--blue);outline-offset:2px}
 .xbtn{white-space:nowrap}.xbtn svg{width:14px!important;height:14px!important;max-width:none;flex:none}
+
+/* ===== Tema v2: TIME logosuyla uyumlu (pembe-kırmızı vurgu + mavi), yumuşak yüzeyler =====
+   Renk rolleri: mavi = doluluk / süre / pay, pembe = GRP ve marka vurgusu. Durum renkleri (yeşil-sarı-pembe bantlar) değişmedi. */
+:root{--brand:#e2215f;--brand-2:#f0527f;--brand-soft:#fde9f0;--ink:#1b2438;--bg:#f4f6fb;--line:#e4e8f1;--r:18px;
+ --shadow:0 1px 2px rgba(27,36,56,.04),0 10px 28px -14px rgba(27,36,56,.14);--shadow-hover:0 2px 4px rgba(27,36,56,.05),0 14px 30px -12px rgba(27,36,56,.2)}
+body{background:linear-gradient(180deg,#f8f9fe 0,#f1f4fa 360px) fixed,var(--bg);-webkit-font-smoothing:antialiased}
+header{position:relative;border-bottom:0;box-shadow:0 1px 0 var(--line),0 8px 24px -18px rgba(27,36,56,.25)}
+header::after{content:'';position:absolute;left:0;right:0;bottom:0;height:3px;background:linear-gradient(90deg,var(--brand),var(--brand-2) 38%,var(--blue))}
+h1{font-weight:750;letter-spacing:-.01em}
+.panel,.card,.cmp-card{border-radius:var(--r);border-color:var(--line);box-shadow:var(--shadow)}
+.panel{padding:22px}.card{transition:box-shadow .18s,transform .18s}.card:hover{box-shadow:var(--shadow-hover);transform:translateY(-1px)}
+.card:first-child{background:radial-gradient(120% 140% at 100% 0,rgba(226,33,95,.38),transparent 52%),linear-gradient(135deg,#2c52de,#4e72f3);border:0}
+.panel>h2,.panel .chart-heading h2{display:flex;align-items:center;gap:10px;font-weight:700}
+.panel>h2::before,.panel .chart-heading h2::before{content:'';width:4px;height:16px;border-radius:4px;background:linear-gradient(180deg,var(--brand),var(--brand-2));flex:none}
+.chart-band-picker h2::before{display:none}
+nav button{border-radius:999px;padding:9px 18px;transition:background .15s,box-shadow .15s}
+nav button:hover{box-shadow:var(--shadow)}
+nav button.active{background:var(--ink);box-shadow:0 6px 16px -8px rgba(27,36,56,.6)}
+nav button.active::before{content:'';display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--brand);margin-right:8px;vertical-align:1px}
+button,.file{border-radius:12px;transition:background .15s,box-shadow .15s,border-color .15s}
+button:hover:not(:disabled),.file:hover{border-color:#cfd6e6;box-shadow:var(--shadow)}
+button.primary{background:linear-gradient(135deg,#2c52de,#4e72f3);box-shadow:0 8px 18px -10px rgba(49,93,234,.8)}
+button.primary:hover:not(:disabled){box-shadow:0 10px 22px -10px rgba(49,93,234,.95)}
+select,input,textarea{border-radius:12px;background:#fff;transition:border-color .15s,box-shadow .15s}
+select:hover,input:hover{border-color:#cdd5e6}
+select:focus,input:focus,textarea:focus{outline:0;border-color:var(--blue);box-shadow:0 0 0 4px rgba(49,93,234,.14)}
+input[type=checkbox]{accent-color:var(--blue)}
+th{background:#f6f8fd;color:#5b6679;font-weight:650}
+tbody tr{transition:background .12s}tbody tr:hover td{background:#f8faff}
+.table-wrap{border-radius:12px}
+.track{height:14px;border-radius:999px;background:#eef1f8}.fill{border-radius:999px;background:linear-gradient(90deg,#4e72f3,#315dea)}
+.hfill{border-radius:999px}.htrack{border-radius:999px}
+.grp-bars .fill{background:linear-gradient(90deg,var(--brand-2),var(--brand))}
+dialog{border-radius:22px;border:0;box-shadow:0 30px 70px -20px rgba(27,36,56,.45)}dialog::backdrop{background:rgba(27,36,56,.42);backdrop-filter:blur(2px)}
+.note{border-radius:12px}
+.dd{border-radius:14px;box-shadow:var(--shadow-hover)}
+.band-rate{color:var(--blue)}
+.xbtn{border-color:var(--brand);color:var(--brand)}.xbtn:hover,.extra[open]>summary .xbtn{background:var(--brand-soft)}.xcount{background:var(--brand)}
+.poweredby{opacity:.9}
+@media(max-width:850px){.panel{padding:16px;border-radius:16px}nav button{padding:8px 14px}}
+@media(prefers-reduced-motion:reduce){*{transition:none!important}.card:hover{transform:none}}
