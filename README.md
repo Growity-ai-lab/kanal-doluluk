@@ -224,6 +224,7 @@ Zamanlama: sunucu her dakika kontrol eder; özet o gün bir kez gönderilir (dur
 
 - **Veri durumu yalnızca yükleme e-postasındadır** (Süper-yönetici/Yönetici alır); herkese giden günlük özette yer almaz.
 - **Yükleme sonrası veri durumu:** Her yüklemeden hemen sonra (panelden ya da otomatik aktarımla) bir sonraki özetin dönemi için kontrol yapılır ve **"Yeni veri yüklendi" / "Otomatik veri aktarımı tamamlandı" e-postasının içine "Veri durumu" bölümü** olarak eklenir: özet dönemi için kaç günün verisi olduğu, kanal ve kayıt sayısı, arşivin kapsadığı aralık, GRP'li kayıt oranı ve sorunlar (verisi olmayan gün, beklenen kanal yok, GRP'siz kayıt, doğrulanmamış kapsam, belirsiz tür, onaylanan uyarılar) ya da "Eksik veya sorun yok". Yükleyen, yöntem ve eklenen/güncellenen/atlanan sayıları e-postanın üst kısmındadır. Ayrı bir zamanlanmış kontrol yoktur; geç yüklemeler (örn. 10:30) gereksiz bir kontrol çalıştırmaz. Hedef özet: hafta içi bugünkü özet henüz gitmediyse bugünün, gittiyse sonraki iş gününün özeti (Pazartesi özeti Cuma–Pazar'ı kapsar).
+- **Yükleme e-postası grafikli HTML'dir** (günlük özetle aynı görünüm: time logosu, Eklenen / Güncellenen / Atlanan kartları, yöntem ve arşiv toplamı, varsa sarı uyarı kutusu ve "Veri durumu" kutusu, "Panele git" düğmesi, powered by Growity AI Studio). HTML göstermeyen istemciler için aynı içeriğin düz metin sürümü eklenir. Kod: `lib/notice.cjs`. Silme talebi ve karar e-postaları düz metin kalır.
 
 ## Yükleme öncesi kontrol
 

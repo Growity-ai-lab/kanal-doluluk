@@ -17,6 +17,7 @@ const { createAuth, RANK } = require('./lib/auth.cjs');
 const auth = createAuth({dir,adminPassword:secrets[0],adminEmail:env.ADMIN_EMAIL||'',maxFails:Number(env.LOGIN_MAX_FAILS)||8});
 // E-posta bildirimi (SMTP_HOST/SMTP_PORT/SMTP_USER/SMTP_PASSWORD/MAIL_FROM tanimliysa acik). Gonderim hatalari istegi bozmaz; denetim kaydina yazilir.
 const { createMailer } = require('./lib/mail.cjs');
+const { buildUploadHtml } = require('./lib/notice.cjs');
 const mail = createMailer(env,{onError:(e,kind)=>auth.audit('mail-failed',{user:'sistem'},{kind,error:String(e.message).slice(0,200)})});
 const NOTIFY_KINDS = ['delete-request','delete-decision','import','import-auto','import-rejected','daily-summary'];
 const notifyOn = new Set(String(env.NOTIFY_ON||NOTIFY_KINDS.join(',')).split(',').map(x=>x.trim()).filter(k=>NOTIFY_KINDS.includes(k)));
@@ -24,9 +25,9 @@ const extraRecipients = String(env.NOTIFY_EMAILS||'').split(/[;,\s]+/).filter(Bo
 const publicUrl = String(env.PUBLIC_URL||env.RENDER_EXTERNAL_URL||'').replace(/\/+$/,'');
 const supers = (exclude='') => [...auth.recipients(['superadmin'],{exclude}),...extraRecipients];
 const managers = (exclude='') => [...auth.recipients(['admin','superadmin'],{exclude}),...extraRecipients];
-function notify(kind,to,subject,lines) {
+function notify(kind,to,subject,lines,html,images) {
   if (!mail.enabled || !notifyOn.has(kind)) return;
-  mail.notify(kind,to,'[Kanal Doluluk] '+subject,lines.join('\n')+(publicUrl?'\n\nPanel: '+publicUrl+'/':''));
+  mail.notify(kind,to,'[Kanal Doluluk] '+subject,lines.join('\n')+(publicUrl?'\n\nPanel: '+publicUrl+'/':''),html,images);
 }
 const scopeText = (spec,kind) => (kind==='prune'?'Eski kayıt temizliği · ':'')+(spec.channel||'Tüm kanallar')+' · '+(spec.start==='1970-01-01'?'... - ':spec.start+' - ')+spec.end;
 const stateFile = path.join(dir,'archive.json.gz');
@@ -266,14 +267,18 @@ function nextSummaryTarget() {
   }
   return summaryTarget(t.date);
 }
-// Yukleme e-postasina eklenen veri kontrolu satirlari (hata olursa yuklemeyi etkilemez).
-function uploadCheckLines() {
+// Yukleme e-postasina eklenen veri kontrolu (hata olursa yuklemeyi etkilemez). Duz metin satirlari ve HTML icin ayni veri.
+function uploadCheck() {
   try {
     const g = nextSummaryTarget(), s = summaryText(g), st = s.status;
-    if (!st) return [];
+    if (!st) return null;
     const facts = st.facts.filter(f=>!f.startsWith('Son yükleme')&&!f.startsWith('Yükleme ayrıntısı'));
-    return ['', 'Veri durumu — sonraki özet için ('+dayLabel(g.date)+' '+SUMMARY_TIME+'):', ...facts.map(f=>'✓ '+f), ...(st.issues.length?st.issues.map(x=>'⚠ '+x.text):['✓ Eksik veya sorun yok.'])];
-  } catch(e) { console.error('upload check:',e.message); return []; }
+    return {title:'Veri durumu — sonraki özet için ('+dayLabel(g.date)+' '+SUMMARY_TIME+')',items:[...facts.map(f=>({ok:true,text:f})),...(st.issues.length?st.issues.map(x=>({ok:false,text:x.text})):[{ok:true,text:'Eksik veya sorun yok.'}])]};
+  } catch(e) { console.error('upload check:',e.message); return null; }
+}
+function uploadCheckLines() {
+  const c = uploadCheck();
+  return c ? ['',c.title+':',...c.items.map(x=>(x.ok?'✓ ':'⚠ ')+x.text)] : [];
 }
 async function summaryTick() {
   if (summaryBusy||!mail.enabled) return;
@@ -530,15 +535,20 @@ http.createServer(async(req,res)=>{
           await save({...state,rows:m.rows,coverage:m.coverage,verified:m.verified,updatedAt:new Date().toISOString(),updatedBy:who.username},machine?'import-auto':'import-'+mode);
           auth.audit('import',ctx,{mode,start,end,complete:!machine&&url.searchParams.get('complete')==='1',bytes:body.length,added:m.added,updated:m.updated,skipped:m.skipped,total:m.rows.length,missingChannels:m.missingChannels,warnings,forced:!machine&&warnings.length>0});
           const retWarn=retentionWarning();
-          notify(machine?'import-auto':'import',managers(machine?'':who.username),machine?'Otomatik veri aktarımı tamamlandı':'Yeni veri yüklendi',[
-            (machine?'Otomatik aktarım (Windows)':who.username+' (panel)')+' veri yükledi.','',
-            'Yöntem: '+(machine?'otomatik, dönemi yenile':mode==='replace'?'dönemi yenile':'ekle')+(mode==='replace'?' ('+start+' - '+end+')':''),
-            'Eklenen: '+m.added+' · Güncellenen: '+m.updated+' · Atlanan (tekrar): '+m.skipped,
-            'Arşivde toplam: '+m.rows.length+' kayıt',
-            ...(m.missingChannels&&m.missingChannels.length?['','UYARI: dosyada eksik kanallar: '+m.missingChannels.join('; ')]:[]),
-            ...(warnings.length?['',(machine?'UYARI':'UYARI (yükleyen onayladı)')+':',...warnings.map(w=>'- '+w)]:[]),
-            ...(retWarn?['','UYARI: '+retWarn]:[]),
-            ...uploadCheckLines()]);
+          {
+            const title=machine?'Otomatik veri aktarımı tamamlandı':'Yeni veri yüklendi',who2=(machine?'Otomatik aktarım (Windows)':who.username+' (panel)')+' veri yükledi.',
+              method='Yöntem: '+(machine?'otomatik, dönemi yenile':mode==='replace'?'dönemi yenile':'ekle')+(mode==='replace'?' ('+start+' - '+end+')':''),
+              wTitle=machine?'UYARI':'UYARI (yükleyen onayladı)',check=uploadCheck();
+            const lines=[who2,'',method,'Eklenen: '+m.added+' · Güncellenen: '+m.updated+' · Atlanan (tekrar): '+m.skipped,'Arşivde toplam: '+m.rows.length+' kayıt',
+              ...(m.missingChannels&&m.missingChannels.length?['','UYARI: dosyada eksik kanallar: '+m.missingChannels.join('; ')]:[]),
+              ...(warnings.length?['',wTitle+':',...warnings.map(w=>'- '+w)]:[]),
+              ...(retWarn?['','UYARI: '+retWarn]:[]),
+              ...(check?['',check.title+':',...check.items.map(x=>(x.ok?'✓ ':'⚠ ')+x.text)]:[])];
+            let html;
+            try { html=buildUploadHtml({kicker:'KANAL DOLULUK · VERİ YÜKLEME',title,who:who2,rows:[['Yöntem',method.slice(8)]],stats:[['Eklenen',m.added],['Güncellenen',m.updated],['Atlanan (tekrar)',m.skipped]],total:m.rows.length,
+              alerts:[{title:'Dosyada eksik kanallar',items:m.missingChannels&&m.missingChannels.length?[m.missingChannels.join('; ')]:[]},{title:wTitle,items:warnings},{title:'Uyarı',items:retWarn?[retWarn]:[]}],check,panelUrl:publicUrl}); } catch(e) { console.error('upload html:',e.message); }
+            notify(machine?'import-auto':'import',managers(machine?'':who.username),title,lines,html,html?mailImages:undefined);
+          }
           return send(res,200,{added:m.added,updated:m.updated,skipped:m.skipped,total:m.rows.length,missingChannels:m.missingChannels,warning:retWarn});
         });
       }
