@@ -28,8 +28,8 @@ const PORT = 18360, base = 'http://localhost:' + PORT;
     const cov = ['Atv', 'Kanal D', 'Now'].flatMap(c => ['2027-05-11', '2027-05-12'].map(d => c + '|' + d));
     const r = buildDailySummary({ rows, coverage: cov, verified: cov, rules: DEFAULT_RULES, expectedChannels: [] }, { yesterday: '2027-05-12' });
     const t = r.lines.join('\n');
-    assert.match(t, /Günün öne çıkanları:\r?\n• En çok düşen ana kanal: Kanal D −\d+ puan \(%9\)/);
-    assert.match(t, /• En çok yükselen ana kanal: Atv \+\d+ puan \(%48\)/);
+    assert.match(t, /Günün öne çıkanları:\r?\n• En çok düşen ana kanal: Kanal D %\d+ → %9 \(−%\d+\)/);
+    assert.match(t, /• En çok yükselen ana kanal: Atv %\d+ → %48 \(\+%\d+\)/);
     assert.match(t, /• En dolu ana kanal: Atv %48/);
     assert.ok(r.html.includes('Günün öne çıkanları') && r.html.includes('En çok düşen ana kanal'));
     assert.ok(t.indexOf('Günün öne çıkanları') < t.indexOf('Genel doluluk'));
@@ -105,8 +105,8 @@ function seed(dir) {
     assert.equal(m[0].subject, '[Kanal Doluluk] Günlük özet — 07 May Cuma – 09 May Pazar');
     const t = m[0].text;
     assert.match(t, /07 May Cuma – 09 May Pazar günleri/);
-    assert.match(t, /Genel doluluk: %10 — önceki hafta \(30 Nis Cuma – 02 May Pazar\): %9 \(\+1 puan\)/);
-    assert.match(t, /1\. Atv: %13 \(\+4 puan\) · GRP 4,5/);
+    assert.match(t, /Genel doluluk: %10 — önceki hafta \(30 Nis Cuma – 02 May Pazar\): %9 \(\+%1\)/);
+    assert.match(t, /1\. Atv: %13 \(\+%4\) · GRP 4,5/);
     assert.match(t, /2\. Kanal D: %9 · GRP 3,0/);                                  // geçen hafta Kanal D verisi yok: fark yazilmaz
     assert.match(t, /Diğer 1 kanalın ortalaması: %2/);
     assert.match(t, /GRP: 7,5 \(\+%150\) · GRPxSEC: 4\.500,0/);

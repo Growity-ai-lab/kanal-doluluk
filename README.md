@@ -60,7 +60,17 @@ Eski sürüm (React/Vite) Vercel'de, verisi Supabase'te çalışıyordu. Yeni s�
 
 **Reklam payı (Reklamverenler / Markalar / Sektörler):** Bu görünümlerde **kanal dağılımı** tablosu (ilk 12) ve **pay değişimi** (önceki döneme göre en çok pay kazanan / kaybeden 5'er varlık) bulunur. Hücre değeri iki biçimde seçilebilir: *kanal içi pay* (reklamverenin o kanalın reklam süresindeki payı) veya *dağılım* (reklamverenin kendi süresinin kanallara bölünmesi). Pay %10'un altında 1 ondalıkla (%4,4), üstünde tam sayı gösterilir. Excel'de aynı veriyle **Kanal dağılımı** sayfası (ilk 30) eklenir.
 
-**Boş kapasite:** Kanal görünümünde **Boş kapasite** paneli (ve Excel'de aynı adlı sayfa): boş süre = kapasite (saat × 720 sn) − yayınlanan süre. Yalnız kapsamı olan kanal-günler sayılır; seçilen aralığın toplamıdır. İki tablo: kanal bazında (kapasite, boş saniye, boş oran, OPT / Erken PT / PT / Geç PT dilimlerine göre boş saniye ve **30 sn'lik yer sayısı**) ve en boş 15 kanal-saat. Filtreler (kanal, grup, zaman dilimi) panelle birlikte uygulanır.
+**Reklamveren / Marka / Sektör görünümleri yalnızca GRP ve GRPxSEC gösterir:** doluluk kartı, doluluk grafiği, karşılaştırmadaki doluluk kartı ve saatlik doluluk seçeneği bu görünümlerde yoktur; trend grafiği GRP'nin dönemsel değişimini gösterir, sonuç tablosu GRP'ye göre sıralanır. Kanal dağılımı (pay) tablosu ve Excel dışa aktarımı değişmedi.
+
+**Boş kapasite:** sayfanın altındaki Boş Kapasite bölümü kaldırıldı; hesaplama Excel dışa aktarımındaki **Boş kapasite** sayfasında (Kanallar görünümü) duruyor.
+
+**Pencereler:** Yönetim menüsünden açılan pencereler, pencerenin dışındaki boş alana tıklayınca (ya da Esc ile) kapanır.
+
+**Zaman aralığı kutusu:** "7 ana kanal — doluluk" bölümünde her zaman aralığının (OPT, Erken PT, PT, Geç PT) yanında, seçili dönemin o aralıktaki 7 ana kanal doluluğu görünür (tüm filtreler uygulanır; işareti kaldırılmış aralıklar için de hesaplanır).
+
+**Detaylı filtreler** düğmesi çerçeveli bir düğmedir; açık filtre sayısını (kanal grubu, sektör, reklamveren, marka, kısmi zaman dilimi) rozet olarak gösterir.
+
+**Boş kapasite:** Kanal görünümünde **Boş kapasite** hesabı yalnızca Excel'deki aynı adlı sayfadadır (panelde bölüm gösterilmez): boş süre = kapasite (saat × 720 sn) − yayınlanan süre. Yalnız kapsamı olan kanal-günler sayılır; seçilen aralığın toplamıdır. İki tablo: kanal bazında (kapasite, boş saniye, boş oran, OPT / Erken PT / PT / Geç PT dilimlerine göre boş saniye ve **30 sn'lik yer sayısı**) ve en boş 15 kanal-saat. Filtreler (kanal, grup, zaman dilimi) panelle birlikte uygulanır.
 
 ## Kullanıcılar, oturum ve denetim kaydı
 
@@ -200,8 +210,8 @@ E-posta **grafikli HTML** olarak gelir (KPI kartları ve fark etiketleri, 7 ana 
 **Dönem ve karşılaştırma:** Salı–Cuma günleri özet **dünü** bir önceki günle karşılaştırır (e-postada "bir önceki gün" yazar). **Pazartesi** günü veri hafta sonu toplu yüklendiği için özet **Cuma–Cumartesi–Pazar'ı (3 gün toplamı)** bir önceki haftanın Cuma–Cumartesi–Pazar'ıyla karşılaştırır ("önceki hafta"). E-postanın üstünde karşılaştırılan tarihler yazar. Dönemde verisi olmayan gün varsa (ör. Cuma yüklenmemiş) bu uyarı olarak yazılır ve iki tarafta da yalnızca verisi olan günler hesaba katılır.
 
 İçerik (panelle aynı hesap çekirdeğiyle üretilir, rakamlar birebir aynıdır):
-- **Günün öne çıkanları** (en üstte, yapay zekâsız, kural tabanlı): en çok düşen / yükselen ana kanal (±5 puan ve üzeri), doluluk ile GRP'nin ters yönde hareketi, %90 üzeri kanallar ya da en dolu kanal, yoğun saatin kayması. Belirgin değişim yoksa bunu söyler. Rakamlar e-postanın geri kalanıyla aynı hesaptan gelir.
-- Genel doluluk ve **önceki haftanın aynı gününe** göre fark (puan), reklam süresi, GRP ve GRPxSEC değişimi.
+- **Günün öne çıkanları** (en üstte, yapay zekâsız, kural tabanlı): en çok düşen / yükselen ana kanal (5 puan ve üzeri; "Atv %43 → %48 (+%5)" biçiminde önceki ve sonraki değerle), doluluk ile GRP'nin ters yönde hareketi, %90 üzeri kanallar ya da en dolu kanal, yoğun saatin kayması. Belirgin değişim yoksa bunu söyler. Rakamlar e-postanın geri kalanıyla aynı hesaptan gelir.
+- Genel doluluk ve **önceki haftanın aynı gününe** göre fark (önceki değerle birlikte, ör. %9 → %10 (+%1)), reklam süresi, GRP ve GRPxSEC değişimi.
 - **7 ana kanal**: doluluk (sıralı), önceki haftaya göre fark, GRP; diğer kanalların ortalaması; en yoğun ve en sakin saat; en yüksek GRP'li kanallar.
 - **Uyarılar**: beklenen kanalın o gün verisi yok, doğrulanmamış kapsam, kapsamı olmayan kanal-gün, belirsiz tür süresi, geçersiz kayıt.
 - **Dünün verisi yüklenmemişse** e-posta bunu açıkça yazar ("DİKKAT: Dün için arşivde veri yok") ve verisi olan son günü özetler. Pazartesi günkü özet Pazar gününü kapsar.
